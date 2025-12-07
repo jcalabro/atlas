@@ -1,8 +1,7 @@
 services:
   fdb-coordinator:
     image: foundationdb/foundationdb:7.3.63
-    platform: "linux/amd64"
-    container_name: fdb-coordinator
+    container_name: atlas-fdb-coordinator
     network_mode: host
     environment:
       FDB_NETWORKING_MODE: host
@@ -10,9 +9,8 @@ services:
   fdb-server-1:
     depends_on:
       - fdb-coordinator
-    platform: "linux/amd64"
     image: foundationdb/foundationdb:7.3.63
-    container_name: fdb-server-1
+    container_name: atlas-fdb-server-1
     network_mode: host
     environment:
       FDB_NETWORKING_MODE: host
@@ -22,8 +20,7 @@ services:
   fdb-server-2:
     depends_on:
       - fdb-coordinator
-    platform: "linux/amd64"
-    container_name: fdb-server-2
+    container_name: atlas-fdb-server-2
     image: foundationdb/foundationdb:7.3.63
     network_mode: host
     environment:
@@ -34,8 +31,7 @@ services:
   fdb-server-3:
     depends_on:
       - fdb-coordinator
-    platform: "linux/amd64"
-    container_name: fdb-server-3
+    container_name: atlas-fdb-server-3
     image: foundationdb/foundationdb:7.3.63
     network_mode: host
     environment:
