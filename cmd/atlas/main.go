@@ -58,6 +58,11 @@ func main() {
 						Usage: `bind address of the metrics and pprof server (use "" to disable)`,
 					},
 					&cli.StringFlag{
+						Name:  "tap-addr",
+						Value: "ws://localhost:2480/channel",
+						Usage: `address of the tap server from which events will be ingested`,
+					},
+					&cli.StringFlag{
 						Name:  "fdb-cluster-file",
 						Value: "foundation.cluster",
 						Usage: "path to the foundationdb cluster file for the client",
@@ -82,6 +87,8 @@ func main() {
 					args := &server.Args{
 						ServerAddr:  c.String("addr"),
 						MetricsAddr: c.String("metrics-addr"),
+
+						TapAddr: c.String("tap-addr"),
 
 						FDBClusterFile:           c.String("fdb-cluster-file"),
 						FDBAPIVersion:            c.Int("fdb-api-version"),

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -31,6 +32,8 @@ type Args struct {
 	ServerAddr  string
 	MetricsAddr string
 
+	TapAddr string
+
 	FDBClusterFile           string
 	FDBAPIVersion            int
 	FDBTransactionTimeout    int64
@@ -41,7 +44,16 @@ type server struct {
 	log    *slog.Logger
 	tracer trace.Tracer
 
+	shutOnce sync.Once
+
 	fdb fdb.Database
+}
+
+func (s *server) shutdown(cancel context.CancelFunc) {
+	s.shutOnce.Do(func() {
+		s.log.Info("shutdown initiated")
+		cancel()
+	})
 }
 
 func newServer(ctx context.Context, args *Args) (*server, error) {
@@ -73,6 +85,7 @@ func newServer(ctx context.Context, args *Args) (*server, error) {
 		tracer: otel.Tracer("atlas"),
 	}
 
+	// initialize the foundation client
 	err := fdb.APIVersion(730)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set fdb client api version: %w", err)
@@ -107,110 +120,131 @@ func Run(ctx context.Context, args *Args) error {
 		return err
 	}
 
-	defer s.log.Info("server shutdown complete")
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
-	go s.metricsServer(args)
+	go s.metricsServer(ctx, args)
 
-	wg := &sync.WaitGroup{}
-	defer wg.Wait()
-
-	done := make(chan any)
-	defer close(done)
-
-	wg.Add(1)
-	go s.serve(wg, done, args)
-
-	// wait for a termination signal, then gracefully shut down
+	// listen for shutdown signals to gracefully stop the system
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	<-sig
 
-	s.log.Info("shutdown signal received, stopping server")
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-sig:
+			s.log.Info("received shutdown signal")
+			s.shutdown(cancel)
+		}
+	}()
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.serve(ctx, args); err != nil {
+			s.log.Error("database server error", "err", err)
+		}
+		s.shutdown(cancel)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := s.ingest(ctx, args); err != nil {
+			s.log.Error("ingester error", "err", err)
+		}
+		s.shutdown(cancel)
+	}()
+
+	wg.Wait()
+	s.log.Info("server shutdown complete")
 
 	return nil
 }
 
-func (s *server) metricsServer(args *Args) {
+func (s *server) metricsServer(ctx context.Context, args *Args) {
 	if args.MetricsAddr == "" {
-		s.log.Info("metrics server not listening because it has been disabled by the user")
+		s.log.Info("metrics server disabled")
 		return
 	}
 
-	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/version", env.VersionHandler)
-
-	http.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
-		_, err := fmt.Fprintf(w, "OK\n")
-		if err != nil {
-			s.log.Warn("failed to write ping response", "err", err)
-			return
-		}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/version", env.VersionHandler)
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprintf(w, "OK")
 	})
 
-	srv := http.Server{
+	srv := &http.Server{
 		Addr:         args.MetricsAddr,
-		Handler:      http.DefaultServeMux,
+		Handler:      mux,
 		ReadTimeout:  time.Minute,
 		WriteTimeout: time.Minute,
 	}
 
-	s.log.Info("metrics server listening", "addr", srv.Addr)
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
 
-	err := srv.ListenAndServe()
-	if err != nil && err != http.ErrServerClosed {
-		s.log.Error("error in metrics server", "error", err)
-		os.Exit(1)
+	s.log.Info("metrics server listening", "addr", srv.Addr)
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.log.Error("metrics server error", "err", err)
 	}
 }
 
-func (s *server) serve(wg *sync.WaitGroup, done <-chan any, args *Args) {
-	defer wg.Done()
-
-	l, err := net.Listen("tcp", args.ServerAddr)
+func (s *server) serve(ctx context.Context, args *Args) error {
+	lc := &net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp", args.ServerAddr)
 	if err != nil {
-		s.log.Error("failed to initialize server listener", "err", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to listen on %s: %w", args.ServerAddr, err)
 	}
 
 	s.log.Info("database server listening", "addr", args.ServerAddr)
 
+	// shutdown when complete
 	go func() {
-		// wait until the user requests that the server is shut down, then close the listener
-		<-done
-		if err := l.Close(); err != nil {
-			s.log.Error("failed to close database server", "err", err)
-			os.Exit(1)
-		}
+		<-ctx.Done()
+		_ = l.Close()
 	}()
+
+	// Track active connections for graceful shutdown
+	var connWg sync.WaitGroup
+	defer connWg.Wait()
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			select {
-			case <-done:
+			// Check if this is due to shutdown
+			if ctx.Err() != nil {
 				s.log.Info("database server stopped")
-				return
-			default:
+				return nil
 			}
-
-			s.log.Warn("failed to accept client connection", "err", err)
+			s.log.Warn("failed to accept connection", "err", err)
 			continue
 		}
 
-		// sess := atas.NewSession(&redis.NewSessionArgs{
-		// 	Conn: conn,
-		// 	FDB:  s.fdb,
-		// 	Dirs: s.redisDirs,
-		// })
-
+		connWg.Add(1)
 		go func() {
-			defer func() {
-				if err := conn.Close(); err != nil {
-					s.log.Warn("failed to close redis client connection", "err", err)
-				}
-			}()
-
-			// sess.Serve(context.Background())
+			defer connWg.Done()
+			s.handleConn(ctx, conn)
 		}()
 	}
+}
+
+func (s *server) handleConn(ctx context.Context, conn net.Conn) {
+	defer func() {
+		if err := conn.Close(); err != nil {
+			s.log.Warn("failed to close client connection", "err", err)
+		}
+	}()
+
+	// @TODO (jrc): implement session handling
+
+	// for now, just wait for context cancellation to simulate a long-running session
+	<-ctx.Done()
 }

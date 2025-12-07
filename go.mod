@@ -6,6 +6,7 @@ toolchain go1.24.11
 
 require (
 	github.com/apple/foundationdb/bindings/go v0.0.0-20250221231555-5140696da2df
+	github.com/gorilla/websocket v1.5.3
 	github.com/prometheus/client_golang v1.23.2
 	github.com/urfave/cli/v3 v3.6.1
 	go.opentelemetry.io/otel v1.38.0
