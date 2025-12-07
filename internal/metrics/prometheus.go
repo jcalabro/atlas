@@ -3,8 +3,6 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -46,14 +44,3 @@ var (
 		Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 16),
 	}, []string{"status"})
 )
-
-func SpanEnd(span trace.Span, err error) {
-	if err == nil {
-		span.SetStatus(codes.Ok, "ok")
-	} else {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
-	}
-
-	span.End()
-}

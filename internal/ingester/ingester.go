@@ -1,18 +1,33 @@
-package server
+package ingester
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
+	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/gorilla/websocket"
+	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
+
+type Args struct {
+	TapAddr     string
+	MetricsAddr string
+
+	FDB foundation.Config
+}
 
 type tapMessage struct {
 	ID     int64      `json:"id"`
@@ -38,7 +53,64 @@ type tapUser struct {
 	Status   string `json:"status"`
 }
 
-func (s *server) ingest(ctx context.Context, args *Args) error {
+type ingester struct {
+	log    *slog.Logger
+	tracer trace.Tracer
+
+	shutOnce sync.Once
+
+	fdb fdb.Database
+}
+
+func (i *ingester) shutdown(cancel context.CancelFunc) {
+	i.shutOnce.Do(func() {
+		i.log.Info("shutdown initiated")
+		cancel()
+	})
+}
+
+func Run(ctx context.Context, args *Args) error {
+	if err := metrics.InitTracing(ctx, "atlas.ingester"); err != nil {
+		return err
+	}
+
+	db, err := foundation.Open(args.FDB)
+	if err != nil {
+		return err
+	}
+
+	i := &ingester{
+		log:    slog.Default().With(slog.String("component", "ingester")),
+		tracer: otel.Tracer("atlas.ingester"),
+		fdb:    db,
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	go metrics.RunServer(ctx, args.MetricsAddr)
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		select {
+		case <-ctx.Done():
+		case <-sig:
+			i.log.Info("received shutdown signal")
+			i.shutdown(cancel)
+		}
+	}()
+
+	if err := i.ingest(ctx, args); err != nil {
+		return err
+	}
+
+	i.log.Info("ingester shutdown complete")
+	return nil
+}
+
+func (i *ingester) ingest(ctx context.Context, args *Args) error {
 	const (
 		maxConsecutiveErrs = 5
 		initialBackoff     = 1 * time.Second
@@ -48,27 +120,26 @@ func (s *server) ingest(ctx context.Context, args *Args) error {
 	backoff := initialBackoff
 
 	for {
-		// Check for shutdown before attempting connection
 		if ctx.Err() != nil {
-			s.log.Info("ingester shutting down")
+			i.log.Info("ingester shutting down")
 			return nil
 		}
 
-		err := s.ingestOnce(ctx, args)
+		err := i.ingestOnce(ctx, args.TapAddr)
 		if errors.Is(err, context.Canceled) {
-			s.log.Info("ingester shutting down")
+			i.log.Info("ingester shutting down")
 			return nil
 		}
 
 		if err == nil {
 			errCount = 0
 			backoff = initialBackoff
-			s.log.Info("tap connection closed normally, reconnecting")
+			i.log.Info("tap connection closed normally, reconnecting")
 			continue
 		}
 
 		errCount++
-		s.log.Error("tap connection failed",
+		i.log.Error("tap connection failed",
 			"err", err,
 			"consecutive_errors", errCount,
 		)
@@ -77,11 +148,11 @@ func (s *server) ingest(ctx context.Context, args *Args) error {
 			return fmt.Errorf("tap connection failed %d consecutive times: %w", errCount, err)
 		}
 
-		s.log.Info("retrying tap connection", "consecutive_errors", errCount)
+		i.log.Info("retrying tap connection", "consecutive_errors", errCount)
 
 		select {
 		case <-ctx.Done():
-			s.log.Info("ingester shutting down during backoff")
+			i.log.Info("ingester shutting down during backoff")
 			return nil
 		case <-time.After(backoff):
 		}
@@ -90,15 +161,15 @@ func (s *server) ingest(ctx context.Context, args *Args) error {
 	}
 }
 
-func (s *server) ingestOnce(ctx context.Context, args *Args) error {
+func (i *ingester) ingestOnce(ctx context.Context, tapAddr string) error {
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	conn, _, err := dialer.DialContext(ctx, args.TapAddr, nil)
+	conn, _, err := dialer.DialContext(ctx, tapAddr, nil)
 	if err != nil {
-		return fmt.Errorf("failed to connect to tap at %q: %w", args.TapAddr, err)
+		return fmt.Errorf("failed to connect to tap at %q: %w", tapAddr, err)
 	}
-	defer conn.Close() // nolint:errcheck
+	defer conn.Close() //nolint:errcheck
 
-	s.log.Info("connected to tap", "addr", args.TapAddr)
+	i.log.Info("connected to tap", "addr", tapAddr)
 
 	go func() {
 		<-ctx.Done()
@@ -128,14 +199,14 @@ func (s *server) ingestOnce(ctx context.Context, args *Args) error {
 			return fmt.Errorf("failed to read websocket message: %w", err)
 		}
 
-		if err := s.processMessage(ctx, data); err != nil {
-			s.log.Warn("failed to process message", "err", err)
+		if err := i.processMessage(ctx, data); err != nil {
+			i.log.Warn("failed to process message", "err", err)
 		}
 	}
 }
 
-func (s *server) processMessage(ctx context.Context, data []byte) (err error) {
-	ctx, span := s.tracer.Start(ctx, "handleRecord", trace.WithAttributes(
+func (i *ingester) processMessage(ctx context.Context, data []byte) (err error) {
+	ctx, span := i.tracer.Start(ctx, "processMessage", trace.WithAttributes(
 		attribute.Int("data_len", len(data)),
 	))
 
@@ -160,7 +231,7 @@ func (s *server) processMessage(ctx context.Context, data []byte) (err error) {
 		}
 
 		action = msg.Record.Action
-		if err := s.handleRecordEvent(ctx, &msg); err != nil {
+		if err := i.handleRecordEvent(ctx, &msg); err != nil {
 			return err
 		}
 
@@ -170,7 +241,7 @@ func (s *server) processMessage(ctx context.Context, data []byte) (err error) {
 		}
 
 		action = msg.User.Status
-		if err := s.handleUserEvent(ctx, &msg); err != nil {
+		if err := i.handleUserEvent(ctx, &msg); err != nil {
 			return err
 		}
 
@@ -182,8 +253,8 @@ func (s *server) processMessage(ctx context.Context, data []byte) (err error) {
 	return nil
 }
 
-func (s *server) handleUserEvent(ctx context.Context, msg *tapMessage) (err error) {
-	_, span := s.tracer.Start(ctx, "handleUserEvent", trace.WithAttributes(
+func (i *ingester) handleUserEvent(ctx context.Context, msg *tapMessage) (err error) {
+	_, span := i.tracer.Start(ctx, "handleUserEvent", trace.WithAttributes(
 		attribute.Int64("id", msg.ID),
 		attribute.String("did", msg.User.DID),
 		attribute.String("handle", msg.User.Handle),
@@ -194,15 +265,11 @@ func (s *server) handleUserEvent(ctx context.Context, msg *tapMessage) (err erro
 		metrics.SpanEnd(span, err)
 	}()
 
-	metrics.IngestMessages.WithLabelValues(metrics.StatusOK).Inc()
-
-	// TODO (jrc): handle user event
-
 	return nil
 }
 
-func (s *server) handleRecordEvent(ctx context.Context, msg *tapMessage) (err error) {
-	_, span := s.tracer.Start(ctx, "handleRecordEvent", trace.WithAttributes(
+func (i *ingester) handleRecordEvent(ctx context.Context, msg *tapMessage) (err error) {
+	_, span := i.tracer.Start(ctx, "handleRecordEvent", trace.WithAttributes(
 		attribute.Int64("id", msg.ID),
 		attribute.String("did", msg.Record.DID),
 		attribute.String("collection", msg.Record.Collection),
@@ -213,8 +280,6 @@ func (s *server) handleRecordEvent(ctx context.Context, msg *tapMessage) (err er
 	defer func() {
 		metrics.SpanEnd(span, err)
 	}()
-
-	// TODO (jrc): handle record event
 
 	return nil
 }

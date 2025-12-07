@@ -7,9 +7,30 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/ingester"
 	"github.com/jcalabro/atlas/internal/server"
 	"github.com/urfave/cli/v3"
 )
+
+var fdbFlags = []cli.Flag{
+	&cli.StringFlag{
+		Name:  "fdb-cluster-file",
+		Value: "foundation.cluster",
+	},
+	&cli.IntFlag{
+		Name:  "fdb-api-version",
+		Value: 730,
+	},
+	&cli.Int64Flag{
+		Name:  "fdb-transaction-timeout-millis",
+		Value: 5000,
+	},
+	&cli.Int64Flag{
+		Name:  "fdb-transaction-retry-limit",
+		Value: 100,
+	},
+}
 
 func main() {
 	cmd := &cli.Command{
@@ -19,17 +40,14 @@ func main() {
 			&cli.StringFlag{
 				Name:  "log-lvl",
 				Value: "info",
-				Usage: "Log level",
 			},
 			&cli.StringFlag{
 				Name:  "log-fmt",
 				Value: "json",
-				Usage: "Log format type (default, json)",
 			},
 			&cli.BoolFlag{
 				Name:  "log-src",
 				Value: true,
-				Usage: "Include source code line numbers in logs",
 			},
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
@@ -44,63 +62,53 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:  "run",
-				Usage: "run the database server",
-				Flags: []cli.Flag{
+				Name: "server",
+				Flags: append(fdbFlags,
 					&cli.StringFlag{
 						Name:  "addr",
-						Value: "0.0.0.0:9787",
-						Usage: `bind address of the database server`,
+						Value: "0.0.0.0:2866",
 					},
 					&cli.StringFlag{
 						Name:  "metrics-addr",
 						Value: "0.0.0.0:6060",
-						Usage: `bind address of the metrics and pprof server (use "" to disable)`,
 					},
+				),
+				Action: func(ctx context.Context, c *cli.Command) error {
+					return server.Run(ctx, &server.ServerArgs{
+						Addr:        c.String("addr"),
+						MetricsAddr: c.String("metrics-addr"),
+						FDB: foundation.Config{
+							ClusterFile:           c.String("fdb-cluster-file"),
+							APIVersion:            c.Int("fdb-api-version"),
+							TransactionTimeout:    c.Int64("fdb-transaction-timeout-millis"),
+							TransactionRetryLimit: c.Int64("fdb-transaction-retry-limit"),
+						},
+					})
+				},
+			},
+			{
+				Name: "ingester",
+				Flags: append(fdbFlags,
 					&cli.StringFlag{
 						Name:  "tap-addr",
 						Value: "ws://localhost:2480/channel",
-						Usage: `address of the tap server from which events will be ingested`,
 					},
 					&cli.StringFlag{
-						Name:  "fdb-cluster-file",
-						Value: "foundation.cluster",
-						Usage: "path to the foundationdb cluster file for the client",
+						Name:  "metrics-addr",
+						Value: "0.0.0.0:6061",
 					},
-					&cli.IntFlag{
-						Name:  "fdb-api-version",
-						Value: 730,
-						Usage: "foundationdb api version",
-					},
-					&cli.Int64Flag{
-						Name:  "fdb-transaction-timeout-millis",
-						Value: 5000,
-						Usage: "max timeout per transaction",
-					},
-					&cli.Int64Flag{
-						Name:  "fdb-transaction-retry-limit",
-						Value: 100,
-						Usage: "max number of retries per aborted transaction",
-					},
-				},
+				),
 				Action: func(ctx context.Context, c *cli.Command) error {
-					args := &server.Args{
-						ServerAddr:  c.String("addr"),
+					return ingester.Run(ctx, &ingester.Args{
+						TapAddr:     c.String("tap-addr"),
 						MetricsAddr: c.String("metrics-addr"),
-
-						TapAddr: c.String("tap-addr"),
-
-						FDBClusterFile:           c.String("fdb-cluster-file"),
-						FDBAPIVersion:            c.Int("fdb-api-version"),
-						FDBTransactionTimeout:    c.Int64("fdb-transaction-timeout-millis"),
-						FDBTransactionRetryLimit: c.Int64("fdb-transaction-retry-limit"),
-					}
-
-					if err := server.Run(ctx, args); err != nil {
-						return fmt.Errorf("failed to run server: %w", err)
-					}
-
-					return nil
+						FDB: foundation.Config{
+							ClusterFile:           c.String("fdb-cluster-file"),
+							APIVersion:            c.Int("fdb-api-version"),
+							TransactionTimeout:    c.Int64("fdb-transaction-timeout-millis"),
+							TransactionRetryLimit: c.Int64("fdb-transaction-retry-limit"),
+						},
+					})
 				},
 			},
 		},
