@@ -12,6 +12,8 @@ github.com/bluesky-social/indigo v0.0.0-20251222013811-8761d0dcd64e h1:PW9w23hjG
 github.com/bluesky-social/indigo v0.0.0-20251222013811-8761d0dcd64e/go.mod h1:KIy0FgNQacp4uv2Z7xhNkV3qZiUSGuRky97s7Pa4v+o=
 github.com/bluesky-social/indigo v0.0.0-20251222013944-7bb626e868fe h1:MQiR6+qVS3PPF0bt9HrscChOgAhS+bZvAVTzdu6nwAQ=
 github.com/bluesky-social/indigo v0.0.0-20251222013944-7bb626e868fe/go.mod h1:KIy0FgNQacp4uv2Z7xhNkV3qZiUSGuRky97s7Pa4v+o=
+github.com/bluesky-social/indigo v0.0.0-20251222014515-29c54adca2ec h1:kJDRGESlSP6xSOFvRkuHT7Bnj56JTJ+YADQDVBaJEvE=
+github.com/bluesky-social/indigo v0.0.0-20251222014515-29c54adca2ec/go.mod h1:KIy0FgNQacp4uv2Z7xhNkV3qZiUSGuRky97s7Pa4v+o=
 github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1xcsSM=
 github.com/cenkalti/backoff/v5 v5.0.3/go.mod h1:rkhZdG3JZukswDf7f0cwqPNk4K0sa+F97BxZthm/crw=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
