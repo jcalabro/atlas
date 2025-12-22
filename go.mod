@@ -1,8 +1,6 @@
 module github.com/jcalabro/atlas
 
-go 1.24.5
-
-toolchain go1.24.11
+go 1.25
 
 require (
 	github.com/apple/foundationdb/bindings/go v0.0.0-20250221231555-5140696da2df
@@ -17,6 +15,7 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/bluesky-social/indigo v0.0.0-20251222013944-7bb626e868fe // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect

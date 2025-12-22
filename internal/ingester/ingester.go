@@ -2,11 +2,8 @@ package ingester
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -14,7 +11,7 @@ import (
 	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
-	"github.com/gorilla/websocket"
+	"github.com/bluesky-social/indigo/tap"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
 	"go.opentelemetry.io/otel"
@@ -29,41 +26,18 @@ type Args struct {
 	FDB foundation.Config
 }
 
-type tapMessage struct {
-	ID     int64      `json:"id"`
-	Type   string     `json:"type"`
-	Record *tapRecord `json:"record,omitempty"`
-	User   *tapUser   `json:"user,omitempty"`
-}
-
-type tapRecord struct {
-	DID        string          `json:"did"`
-	Collection string          `json:"collection"`
-	Rkey       string          `json:"rkey"`
-	Action     string          `json:"action"`
-	CID        string          `json:"cid"`
-	Record     json.RawMessage `json:"record"`
-	Live       bool            `json:"live"`
-}
-
-type tapUser struct {
-	DID      string `json:"did"`
-	Handle   string `json:"handle"`
-	IsActive bool   `json:"isActive"`
-	Status   string `json:"status"`
-}
-
 type ingester struct {
 	log    *slog.Logger
 	tracer trace.Tracer
 
-	shutOnce sync.Once
+	shutdownOnce sync.Once
 
+	tap *tap.Websocket
 	fdb fdb.Database
 }
 
 func (i *ingester) shutdown(cancel context.CancelFunc) {
-	i.shutOnce.Do(func() {
+	i.shutdownOnce.Do(func() {
 		i.log.Info("shutdown initiated")
 		cancel()
 	})
@@ -79,10 +53,22 @@ func Run(ctx context.Context, args *Args) error {
 		return err
 	}
 
+	log := slog.Default().With(slog.String("component", "ingester"))
+
 	i := &ingester{
-		log:    slog.Default().With(slog.String("component", "ingester")),
+		log:    log,
 		tracer: otel.Tracer("atlas.ingester"),
 		fdb:    db,
+	}
+
+	i.tap, err = tap.NewWebsocket(
+		args.TapAddr,
+		i.processMessage,
+		tap.WithAcks(),
+		tap.WithLogger(log),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to initialize tap client: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -102,112 +88,19 @@ func Run(ctx context.Context, args *Args) error {
 		}
 	}()
 
-	if err := i.ingest(ctx, args); err != nil {
-		return err
+	i.log.Info("ingester running")
+	if err := i.tap.Run(ctx); err != nil {
+		return fmt.Errorf("failed to run tap websocket consumer: %w", err)
 	}
 
 	i.log.Info("ingester shutdown complete")
 	return nil
 }
 
-func (i *ingester) ingest(ctx context.Context, args *Args) error {
-	const (
-		maxConsecutiveErrs = 5
-		initialBackoff     = 1 * time.Second
-	)
-
-	errCount := 0
-	backoff := initialBackoff
-
-	for {
-		if ctx.Err() != nil {
-			i.log.Info("ingester shutting down")
-			return nil
-		}
-
-		err := i.ingestOnce(ctx, args.TapAddr)
-		if errors.Is(err, context.Canceled) {
-			i.log.Info("ingester shutting down")
-			return nil
-		}
-
-		if err == nil {
-			errCount = 0
-			backoff = initialBackoff
-			i.log.Info("tap connection closed normally, reconnecting")
-			continue
-		}
-
-		errCount++
-		i.log.Error("tap connection failed",
-			"err", err,
-			"consecutive_errors", errCount,
-		)
-
-		if errCount >= maxConsecutiveErrs {
-			return fmt.Errorf("tap connection failed %d consecutive times: %w", errCount, err)
-		}
-
-		i.log.Info("retrying tap connection", "consecutive_errors", errCount)
-
-		select {
-		case <-ctx.Done():
-			i.log.Info("ingester shutting down during backoff")
-			return nil
-		case <-time.After(backoff):
-		}
-
-		backoff = min(backoff*2, 10*time.Second)
-	}
-}
-
-func (i *ingester) ingestOnce(ctx context.Context, tapAddr string) error {
-	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
-	conn, _, err := dialer.DialContext(ctx, tapAddr, nil)
-	if err != nil {
-		return fmt.Errorf("failed to connect to tap at %q: %w", tapAddr, err)
-	}
-	defer conn.Close() //nolint:errcheck
-
-	i.log.Info("connected to tap", "addr", tapAddr)
-
-	go func() {
-		<-ctx.Done()
-		_ = conn.Close()
-	}()
-
-	for {
-		if err := conn.SetReadDeadline(time.Now().Add(60 * time.Second)); err != nil {
-			return fmt.Errorf("failed to set websocket read deadline: %w", err)
-		}
-
-		_, data, err := conn.ReadMessage()
-		if err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				return nil
-			}
-
-			var netErr net.Error
-			if errors.As(err, &netErr) && ctx.Err() != nil {
-				return ctx.Err()
-			}
-
-			return fmt.Errorf("failed to read websocket message: %w", err)
-		}
-
-		if err := i.processMessage(ctx, data); err != nil {
-			i.log.Warn("failed to process message", "err", err)
-		}
-	}
-}
-
-func (i *ingester) processMessage(ctx context.Context, data []byte) (err error) {
+func (i *ingester) processMessage(ctx context.Context, ev *tap.Event) (err error) {
 	ctx, span := i.tracer.Start(ctx, "processMessage", trace.WithAttributes(
-		attribute.Int("data_len", len(data)),
+		attribute.Int64("id", int64(ev.ID)),
+		attribute.String("type", ev.Type),
 	))
 
 	start := time.Now()
@@ -219,67 +112,52 @@ func (i *ingester) processMessage(ctx context.Context, data []byte) (err error) 
 		metrics.SpanEnd(span, err)
 	}()
 
-	var msg tapMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		return fmt.Errorf("failed to unmarshal message: %w", err)
-	}
-
-	switch msg.Type {
-	case "record":
-		if msg.Record == nil {
-			return fmt.Errorf("record message %d has nil record field", msg.ID)
+	switch pl := ev.Payload().(type) {
+	case *tap.IdentityEvent:
+		if err := i.handleIdentityEvent(ctx, pl); err != nil {
+			return fmt.Errorf("failed to handle identity event: %w", err)
 		}
-
-		action = msg.Record.Action
-		if err := i.handleRecordEvent(ctx, &msg); err != nil {
-			return err
+	case *tap.RecordEvent:
+		if err := i.handleRecordEvent(ctx, pl); err != nil {
+			return fmt.Errorf("failed to handle record event: %w", err)
 		}
-
-	case "user":
-		if msg.User == nil {
-			return fmt.Errorf("user message %d has nil user field", msg.ID)
-		}
-
-		action = msg.User.Status
-		if err := i.handleUserEvent(ctx, &msg); err != nil {
-			return err
-		}
-
 	default:
-		return fmt.Errorf("unknown message type %q for message %d", msg.Type, msg.ID)
+		return fmt.Errorf("unknown message type %q for message %d", ev.Payload(), ev.ID)
 	}
 
 	status = metrics.StatusOK
 	return nil
 }
 
-func (i *ingester) handleUserEvent(ctx context.Context, msg *tapMessage) (err error) {
-	_, span := i.tracer.Start(ctx, "handleUserEvent", trace.WithAttributes(
-		attribute.Int64("id", msg.ID),
-		attribute.String("did", msg.User.DID),
-		attribute.String("handle", msg.User.Handle),
-		attribute.Bool("is_active", msg.User.IsActive),
-		attribute.String("status", msg.User.Status),
+func (i *ingester) handleIdentityEvent(ctx context.Context, ident *tap.IdentityEvent) (err error) {
+	_, span := i.tracer.Start(ctx, "handleIdentityEvent", trace.WithAttributes(
+		attribute.String("did", ident.DID),
+		attribute.String("handle", ident.Handle),
+		attribute.Bool("is_active", ident.IsActive),
+		attribute.String("status", ident.Status),
 	))
 	defer func() {
 		metrics.SpanEnd(span, err)
 	}()
+
+	i.log.Info("GOT ONE", "type", "identity")
 
 	return nil
 }
 
-func (i *ingester) handleRecordEvent(ctx context.Context, msg *tapMessage) (err error) {
+func (i *ingester) handleRecordEvent(ctx context.Context, rec *tap.RecordEvent) (err error) {
 	_, span := i.tracer.Start(ctx, "handleRecordEvent", trace.WithAttributes(
-		attribute.Int64("id", msg.ID),
-		attribute.String("did", msg.Record.DID),
-		attribute.String("collection", msg.Record.Collection),
-		attribute.String("rkey", msg.Record.Rkey),
-		attribute.String("action", msg.Record.Action),
-		attribute.Bool("live", msg.Record.Live),
+		attribute.String("did", rec.DID),
+		attribute.String("collection", rec.Collection),
+		attribute.String("rkey", rec.Rkey),
+		attribute.String("action", rec.Action),
+		attribute.Bool("live", rec.Live),
 	))
 	defer func() {
 		metrics.SpanEnd(span, err)
 	}()
+
+	i.log.Info("GOT ONE", "type", "record")
 
 	return nil
 }
