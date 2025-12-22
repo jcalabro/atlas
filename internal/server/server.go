@@ -61,10 +61,14 @@ func Run(ctx context.Context, args *ServerArgs) error {
 		fdb:    db,
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	cancelOnce := &sync.Once{}
+	ctx, cancelFn := context.WithCancel(ctx)
+	cancel := func() {
+		cancelOnce.Do(func() {
+			cancelFn()
+		})
+	}
 	defer cancel()
-
-	go metrics.RunServer(ctx, args.MetricsAddr)
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
@@ -79,15 +83,17 @@ func Run(ctx context.Context, args *ServerArgs) error {
 	}()
 
 	wg := &sync.WaitGroup{}
-
-	wg.Go(func() { s.serveGRPC(ctx, args) })
-	wg.Go(func() { s.serveTap(ctx, args) })
+	wg.Go(func() { s.serveGRPC(ctx, cancel, args) })
+	wg.Go(func() { metrics.RunServer(ctx, cancel, args.MetricsAddr) })
+	wg.Wait()
 
 	s.log.Info("server shutdown complete")
 	return nil
 }
 
-func (s *server) serveGRPC(ctx context.Context, args *ServerArgs) {
+func (s *server) serveGRPC(ctx context.Context, cancel context.CancelFunc, args *ServerArgs) {
+	defer cancel()
+
 	// srv := &http.Server{
 	// 	Handler:        mux,
 	// 	Addr:           args.Addr,
@@ -107,7 +113,4 @@ func (s *server) serveGRPC(ctx context.Context, args *ServerArgs) {
 	// }); err != nil {
 	// 	return nil, fmt.Errorf("failed to configure HTTP2 server: %w", err)
 	// }
-}
-
-func (s *server) serveTap(ctx context.Context, args *ServerArgs) {
 }
