@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -16,11 +17,11 @@ import (
 	"github.com/jcalabro/atlas/internal/metrics"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/errgroup"
 )
 
-type ServerArgs struct {
+type Args struct {
 	Addr        string
-	TapAddr     string
 	MetricsAddr string
 
 	ReadTimeout  time.Duration
@@ -45,7 +46,7 @@ func (s *server) shutdown(cancel context.CancelFunc) {
 	})
 }
 
-func Run(ctx context.Context, args *ServerArgs) error {
+func Run(ctx context.Context, args *Args) error {
 	if err := metrics.InitTracing(ctx, "atlas.server"); err != nil {
 		return err
 	}
@@ -82,17 +83,29 @@ func Run(ctx context.Context, args *ServerArgs) error {
 		}
 	}()
 
-	wg := &sync.WaitGroup{}
-	wg.Go(func() { s.serveGRPC(ctx, cancel, args) })
-	wg.Go(func() { metrics.RunServer(ctx, cancel, args.MetricsAddr) })
-	wg.Wait()
+	errs, ctx := errgroup.WithContext(ctx)
 
-	s.log.Info("server shutdown complete")
-	return nil
+	errs.Go(func() error {
+		metrics.RunServer(ctx, cancel, args.MetricsAddr)
+		return nil
+	})
+
+	errs.Go(func() error {
+		if err := s.serve(ctx, cancel, args); err != nil {
+			return fmt.Errorf("failed to run connect rpc server: %w", err)
+		}
+
+		s.log.Info("server shutdown complete")
+		return nil
+	})
+
+	return errs.Wait()
 }
 
-func (s *server) serveGRPC(ctx context.Context, cancel context.CancelFunc, args *ServerArgs) {
+func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Args) error {
 	defer cancel()
+
+	return nil
 
 	// srv := &http.Server{
 	// 	Handler:        mux,
