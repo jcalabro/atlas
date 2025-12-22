@@ -71,6 +71,8 @@ func Run(ctx context.Context, args *Args) error {
 	}
 	defer cancel()
 
+	errs, ctx := errgroup.WithContext(ctx)
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
@@ -82,8 +84,6 @@ func Run(ctx context.Context, args *Args) error {
 			s.shutdown(cancel)
 		}
 	}()
-
-	errs, ctx := errgroup.WithContext(ctx)
 
 	errs.Go(func() error {
 		metrics.RunServer(ctx, cancel, args.MetricsAddr)

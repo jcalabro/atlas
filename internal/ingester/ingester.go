@@ -80,6 +80,8 @@ func Run(ctx context.Context, args *Args) error {
 		})
 	}
 
+	errs, ctx := errgroup.WithContext(ctx)
+
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
@@ -91,8 +93,6 @@ func Run(ctx context.Context, args *Args) error {
 			i.shutdown(cancel)
 		}
 	}()
-
-	errs, ctx := errgroup.WithContext(ctx)
 
 	errs.Go(func() error {
 		metrics.RunServer(ctx, cancel, args.MetricsAddr)
@@ -174,5 +174,5 @@ func (i *ingester) handleRecordEvent(ctx context.Context, rec *tap.RecordEvent) 
 
 	i.log.Info("GOT ONE", "type", "record")
 
-	return nil
+	return err
 }
