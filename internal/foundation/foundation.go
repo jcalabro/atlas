@@ -7,10 +7,8 @@ import (
 )
 
 type Config struct {
-	ClusterFile           string
-	APIVersion            int
-	TransactionTimeout    int64
-	TransactionRetryLimit int64
+	ClusterFile string
+	APIVersion  int
 }
 
 func Open(cfg Config) (fdb.Database, error) {
@@ -23,18 +21,20 @@ func Open(cfg Config) (fdb.Database, error) {
 		return fdb.Database{}, fmt.Errorf("failed to initialize fdb client from cluster file %q: %w", cfg.ClusterFile, err)
 	}
 
+	const maxTXMillis = 5000
+	if err := db.Options().SetTransactionTimeout(maxTXMillis); err != nil {
+		return fdb.Database{}, fmt.Errorf("failed to set fdb transaction timeout: %w", err)
+	}
+
+	if err := db.Options().SetTransactionRetryLimit(100); err != nil {
+		return fdb.Database{}, fmt.Errorf("failed to set fdb transaction retry limit: %w", err)
+	}
+
 	_, err = db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
 		return tx.Get(fdb.Key("PING")).Get()
 	})
 	if err != nil {
 		return fdb.Database{}, fmt.Errorf("failed to ping foundationdb: %w", err)
-	}
-
-	if err := db.Options().SetTransactionTimeout(cfg.TransactionTimeout); err != nil {
-		return fdb.Database{}, fmt.Errorf("failed to set fdb transaction timeout: %w", err)
-	}
-	if err := db.Options().SetTransactionRetryLimit(cfg.TransactionRetryLimit); err != nil {
-		return fdb.Database{}, fmt.Errorf("failed to set fdb transaction retry limit: %w", err)
 	}
 
 	return db, nil

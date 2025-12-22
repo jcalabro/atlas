@@ -2,13 +2,12 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	_ "net/http/pprof"
 
@@ -21,7 +20,11 @@ import (
 
 type ServerArgs struct {
 	Addr        string
+	TapAddr     string
 	MetricsAddr string
+
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
 
 	FDB foundation.Config
 }
@@ -75,56 +78,36 @@ func Run(ctx context.Context, args *ServerArgs) error {
 		}
 	}()
 
-	if err := s.serve(ctx, args.Addr); err != nil {
-		return err
-	}
+	wg := &sync.WaitGroup{}
+
+	wg.Go(func() { s.serveGRPC(ctx, args) })
+	wg.Go(func() { s.serveTap(ctx, args) })
 
 	s.log.Info("server shutdown complete")
 	return nil
 }
 
-func (s *server) serve(ctx context.Context, addr string) error {
-	lc := &net.ListenConfig{}
-	l, err := lc.Listen(ctx, "tcp", addr)
-	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", addr, err)
-	}
-
-	s.log.Info("database server listening", "addr", addr)
-
-	go func() {
-		<-ctx.Done()
-		_ = l.Close()
-	}()
-
-	var connWg sync.WaitGroup
-	defer connWg.Wait()
-
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			if ctx.Err() != nil {
-				s.log.Info("database server stopped")
-				return nil
-			}
-			s.log.Warn("failed to accept connection", "err", err)
-			continue
-		}
-
-		connWg.Add(1)
-		go func() {
-			defer connWg.Done()
-			s.handleConn(ctx, conn)
-		}()
-	}
+func (s *server) serveGRPC(ctx context.Context, args *ServerArgs) {
+	// srv := &http.Server{
+	// 	Handler:        mux,
+	// 	Addr:           args.Addr,
+	// 	ErrorLog:       slog.NewLogLogger(s.log.Handler(), slog.LevelError),
+	// 	WriteTimeout:   args.Timeout,
+	// 	ReadTimeout:    args.Timeout,
+	// 	MaxHeaderBytes: httpMaxHeaderBytes,
+	// 	TLSConfig: &tls.Config{
+	// 		NextProtos:   []string{"h2"}, // HTTP2 *only*.
+	// 		MinVersion:   tls.VersionTLS13,
+	// 		Certificates: []tls.Certificate{*certificate},
+	// 	},
+	// }
+	// if err := http2.ConfigureServer(s.grpcServer, &http2.Server{
+	// 	MaxConcurrentStreams: 100_000,
+	// 	MaxHandlers:          1_000_000, // Not actually implemented?
+	// }); err != nil {
+	// 	return nil, fmt.Errorf("failed to configure HTTP2 server: %w", err)
+	// }
 }
 
-func (s *server) handleConn(ctx context.Context, conn net.Conn) {
-	defer func() {
-		if err := conn.Close(); err != nil {
-			s.log.Warn("failed to close client connection", "err", err)
-		}
-	}()
-
-	<-ctx.Done()
+func (s *server) serveTap(ctx context.Context, args *ServerArgs) {
 }

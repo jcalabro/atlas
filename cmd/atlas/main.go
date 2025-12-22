@@ -6,31 +6,12 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/jcalabro/atlas/internal/foundation"
-	"github.com/jcalabro/atlas/internal/ingester"
 	"github.com/jcalabro/atlas/internal/server"
 	"github.com/urfave/cli/v3"
 )
-
-var fdbFlags = []cli.Flag{
-	&cli.StringFlag{
-		Name:  "fdb-cluster-file",
-		Value: "foundation.cluster",
-	},
-	&cli.IntFlag{
-		Name:  "fdb-api-version",
-		Value: 730,
-	},
-	&cli.Int64Flag{
-		Name:  "fdb-transaction-timeout-millis",
-		Value: 5000,
-	},
-	&cli.Int64Flag{
-		Name:  "fdb-transaction-retry-limit",
-		Value: 100,
-	},
-}
 
 func main() {
 	cmd := &cli.Command{
@@ -39,14 +20,17 @@ func main() {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "log-lvl",
+				Usage: "Minimum logging level (debug, info, warn, err)",
 				Value: "info",
 			},
 			&cli.StringFlag{
 				Name:  "log-fmt",
+				Usage: "Log output format (default, json)",
 				Value: "json",
 			},
 			&cli.BoolFlag{
 				Name:  "log-src",
+				Usage: "Whether or not to include source line numbers in log lines",
 				Value: true,
 			},
 		},
@@ -63,50 +47,53 @@ func main() {
 		Commands: []*cli.Command{
 			{
 				Name: "server",
-				Flags: append(fdbFlags,
+				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:  "addr",
+						Usage: "Bind address of the primary HTTP server",
 						Value: "0.0.0.0:2866",
 					},
 					&cli.StringFlag{
+						Name:  "tap-addr",
+						Usage: "Bind address of the tap ingestion HTTP server",
+						Value: "0.0.0.0:2867",
+					},
+					&cli.StringFlag{
 						Name:  "metrics-addr",
+						Usage: "Bind address of the metrics/pprof HTTP server (empty string to disable)",
 						Value: "0.0.0.0:6060",
 					},
-				),
+					&cli.DurationFlag{
+						Name:  "read-timeout",
+						Usage: "Primary HTTP server read timeout",
+						Value: 5 * time.Second,
+					},
+					&cli.DurationFlag{
+						Name:  "write-timeout",
+						Usage: "Primary HTTP server write timeout",
+						Value: 5 * time.Second,
+					},
+					&cli.StringFlag{
+						Name:  "fdb-cluster-file",
+						Usage: "Path to the FoundationDB cluster file",
+						Value: "foundation.cluster",
+					},
+					&cli.IntFlag{
+						Name:  "fdb-api-version",
+						Usage: "FoundationDB server version",
+						Value: 730,
+					},
+				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					return server.Run(ctx, &server.ServerArgs{
-						Addr:        c.String("addr"),
-						MetricsAddr: c.String("metrics-addr"),
+						Addr:         c.String("addr"),
+						TapAddr:      c.String("tap-addr"),
+						MetricsAddr:  c.String("metrics-addr"),
+						ReadTimeout:  c.Duration("read-timeout"),
+						WriteTimeout: c.Duration("write-timeout"),
 						FDB: foundation.Config{
-							ClusterFile:           c.String("fdb-cluster-file"),
-							APIVersion:            c.Int("fdb-api-version"),
-							TransactionTimeout:    c.Int64("fdb-transaction-timeout-millis"),
-							TransactionRetryLimit: c.Int64("fdb-transaction-retry-limit"),
-						},
-					})
-				},
-			},
-			{
-				Name: "ingester",
-				Flags: append(fdbFlags,
-					&cli.StringFlag{
-						Name:  "tap-addr",
-						Value: "ws://localhost:2480/channel",
-					},
-					&cli.StringFlag{
-						Name:  "metrics-addr",
-						Value: "0.0.0.0:6061",
-					},
-				),
-				Action: func(ctx context.Context, c *cli.Command) error {
-					return ingester.Run(ctx, &ingester.Args{
-						TapAddr:     c.String("tap-addr"),
-						MetricsAddr: c.String("metrics-addr"),
-						FDB: foundation.Config{
-							ClusterFile:           c.String("fdb-cluster-file"),
-							APIVersion:            c.Int("fdb-api-version"),
-							TransactionTimeout:    c.Int64("fdb-transaction-timeout-millis"),
-							TransactionRetryLimit: c.Int64("fdb-transaction-retry-limit"),
+							ClusterFile: c.String("fdb-cluster-file"),
+							APIVersion:  c.Int("fdb-api-version"),
 						},
 					})
 				},
