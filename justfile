@@ -53,6 +53,10 @@ test *ARGS="./...":
 cover:
     go tool cover -html coverage.out
 
+# Sends a request to a ConnectRPC server (i.e. `just curl pkg/atlas/atlas.proto http://localhost:2866/atlas.Service/Ping`)
+curl PROTO URL DATA="{}":
+    buf curl --protocol connect --schema {{PROTO}} {{URL}} --data '{{DATA}}'
+
 # Connects to the local foundationdb developement server
 fdbcli:
     fdbcli -C foundation.cluster

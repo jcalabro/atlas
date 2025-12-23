@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/bluesky-social/indigo/tap"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
+	"github.com/jcalabro/atlas/internal/storage"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -33,8 +33,8 @@ type ingester struct {
 
 	shutdownOnce sync.Once
 
-	tap *tap.Websocket
-	fdb fdb.Database
+	tap   *tap.Websocket
+	store *storage.Store
 }
 
 func (i *ingester) shutdown(cancel context.CancelFunc) {
@@ -59,7 +59,7 @@ func Run(ctx context.Context, args *Args) error {
 	i := &ingester{
 		log:    log,
 		tracer: otel.Tracer("atlas.ingester"),
-		fdb:    db,
+		store:  storage.New(db),
 	}
 
 	i.tap, err = tap.NewWebsocket(
@@ -153,8 +153,9 @@ func (i *ingester) handleIdentityEvent(ctx context.Context, ident *tap.IdentityE
 	))
 	defer func() { metrics.SpanEnd(span, err) }()
 
-	i.log.Info("GOT ONE", "type", "identity")
-
+	if err := i.store.PutIdentity(ident.DID, ident.Handle, ident.Status, ident.IsActive); err != nil {
+		return fmt.Errorf("put identity: %w", err)
+	}
 	return nil
 }
 
@@ -168,7 +169,15 @@ func (i *ingester) handleRecordEvent(ctx context.Context, rec *tap.RecordEvent) 
 	))
 	defer func() { metrics.SpanEnd(span, err) }()
 
-	i.log.Info("GOT ONE", "type", "record")
-
-	return err
+	switch rec.Action {
+	case "create", "update":
+		if err := i.store.PutRecord(rec.DID, rec.Collection, rec.Rkey, rec.CID, rec.Record); err != nil {
+			return fmt.Errorf("put record: %w", err)
+		}
+	case "delete":
+		if err := i.store.DeleteRecord(rec.DID, rec.Collection, rec.Rkey); err != nil {
+			return fmt.Errorf("delete record: %w", err)
+		}
+	}
+	return nil
 }

@@ -5,10 +5,16 @@ package atlas;
 option go_package = "github.com/jcalabro/atlas/pkg/atlas";
 
 // AtlasService provides read access to ATProto records stored in Atlas.
-service AtlasService {
+service Service {
+  // Sends a ping to the server
+  rpc Ping(PingRequest) returns (PingResponse);
+
   // GetRecord retrieves a single record by its AT URI or by its component parts.
   rpc GetRecord(GetRecordRequest) returns (GetRecordResponse);
 }
+
+message PingRequest {}
+message PingResponse {}
 
 // GetRecordRequest specifies which record to retrieve.
 // Exactly one of uri or (did + collection + rkey) must be provided.

@@ -20,8 +20,8 @@ import (
 const _ = connect.IsAtLeastVersion1_13_0
 
 const (
-	// AtlasServiceName is the fully-qualified name of the AtlasService service.
-	AtlasServiceName = "AtlasService"
+	// ServiceName is the fully-qualified name of the Service service.
+	ServiceName = "Service"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -32,78 +32,108 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// AtlasServiceGetRecordProcedure is the fully-qualified name of the AtlasService's GetRecord RPC.
-	AtlasServiceGetRecordProcedure = "/atlas.AtlasService/GetRecord"
+	// ServicePingProcedure is the fully-qualified name of the Service's Ping RPC.
+	ServicePingProcedure = "/atlas.Service/Ping"
+	// ServiceGetRecordProcedure is the fully-qualified name of the Service's GetRecord RPC.
+	ServiceGetRecordProcedure = "/atlas.Service/GetRecord"
 )
 
-// AtlasServiceClient is a client for the AtlasService service.
-type AtlasServiceClient interface {
+// ServiceClient is a client for the Service service.
+type ServiceClient interface {
+	// Sends a ping to the server
+	Ping(context.Context, *connect.Request[PingRequest]) (*connect.Response[PingResponse], error)
 	// GetRecord retrieves a single record by its AT URI or by its component parts.
 	GetRecord(context.Context, *connect.Request[GetRecordRequest]) (*connect.Response[GetRecordResponse], error)
 }
 
-// NewAtlasServiceClient constructs a client for the AtlasService service. By default, it uses
-// the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
+// NewServiceClient constructs a client for the Service service. By default, it uses the
+// Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and sends
 // uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC() or
 // connect.WithGRPCWeb() options.
 //
 // The URL supplied here should be the base URL for the Connect or gRPC server (for example,
 // http://api.acme.com or https://acme.com/grpc).
-func NewAtlasServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) AtlasServiceClient {
+func NewServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) ServiceClient {
 	baseURL = strings.TrimRight(baseURL, "/")
-	atlasServiceMethods := File_atlas_proto.Services().ByName("AtlasService").Methods()
-	return &atlasServiceClient{
+	serviceMethods := File_atlas_proto.Services().ByName("Service").Methods()
+	return &serviceClient{
+		ping: connect.NewClient[PingRequest, PingResponse](
+			httpClient,
+			baseURL+ServicePingProcedure,
+			connect.WithSchema(serviceMethods.ByName("Ping")),
+			connect.WithClientOptions(opts...),
+		),
 		getRecord: connect.NewClient[GetRecordRequest, GetRecordResponse](
 			httpClient,
-			baseURL+AtlasServiceGetRecordProcedure,
-			connect.WithSchema(atlasServiceMethods.ByName("GetRecord")),
+			baseURL+ServiceGetRecordProcedure,
+			connect.WithSchema(serviceMethods.ByName("GetRecord")),
 			connect.WithClientOptions(opts...),
 		),
 	}
 }
 
-// atlasServiceClient implements AtlasServiceClient.
-type atlasServiceClient struct {
+// serviceClient implements ServiceClient.
+type serviceClient struct {
+	ping      *connect.Client[PingRequest, PingResponse]
 	getRecord *connect.Client[GetRecordRequest, GetRecordResponse]
 }
 
-// GetRecord calls AtlasService.GetRecord.
-func (c *atlasServiceClient) GetRecord(ctx context.Context, req *connect.Request[GetRecordRequest]) (*connect.Response[GetRecordResponse], error) {
+// Ping calls Service.Ping.
+func (c *serviceClient) Ping(ctx context.Context, req *connect.Request[PingRequest]) (*connect.Response[PingResponse], error) {
+	return c.ping.CallUnary(ctx, req)
+}
+
+// GetRecord calls Service.GetRecord.
+func (c *serviceClient) GetRecord(ctx context.Context, req *connect.Request[GetRecordRequest]) (*connect.Response[GetRecordResponse], error) {
 	return c.getRecord.CallUnary(ctx, req)
 }
 
-// AtlasServiceHandler is an implementation of the AtlasService service.
-type AtlasServiceHandler interface {
+// ServiceHandler is an implementation of the Service service.
+type ServiceHandler interface {
+	// Sends a ping to the server
+	Ping(context.Context, *connect.Request[PingRequest]) (*connect.Response[PingResponse], error)
 	// GetRecord retrieves a single record by its AT URI or by its component parts.
 	GetRecord(context.Context, *connect.Request[GetRecordRequest]) (*connect.Response[GetRecordResponse], error)
 }
 
-// NewAtlasServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
+// NewServiceHandler builds an HTTP handler from the service implementation. It returns the path on
+// which to mount the handler and the handler itself.
 //
 // By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
 // and JSON codecs. They also support gzip compression.
-func NewAtlasServiceHandler(svc AtlasServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	atlasServiceMethods := File_atlas_proto.Services().ByName("AtlasService").Methods()
-	atlasServiceGetRecordHandler := connect.NewUnaryHandler(
-		AtlasServiceGetRecordProcedure,
-		svc.GetRecord,
-		connect.WithSchema(atlasServiceMethods.ByName("GetRecord")),
+func NewServiceHandler(svc ServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	serviceMethods := File_atlas_proto.Services().ByName("Service").Methods()
+	servicePingHandler := connect.NewUnaryHandler(
+		ServicePingProcedure,
+		svc.Ping,
+		connect.WithSchema(serviceMethods.ByName("Ping")),
 		connect.WithHandlerOptions(opts...),
 	)
-	return "/atlas.AtlasService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	serviceGetRecordHandler := connect.NewUnaryHandler(
+		ServiceGetRecordProcedure,
+		svc.GetRecord,
+		connect.WithSchema(serviceMethods.ByName("GetRecord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/atlas.Service/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case AtlasServiceGetRecordProcedure:
-			atlasServiceGetRecordHandler.ServeHTTP(w, r)
+		case ServicePingProcedure:
+			servicePingHandler.ServeHTTP(w, r)
+		case ServiceGetRecordProcedure:
+			serviceGetRecordHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 }
 
-// UnimplementedAtlasServiceHandler returns CodeUnimplemented from all methods.
-type UnimplementedAtlasServiceHandler struct{}
+// UnimplementedServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedServiceHandler struct{}
 
-func (UnimplementedAtlasServiceHandler) GetRecord(context.Context, *connect.Request[GetRecordRequest]) (*connect.Response[GetRecordResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("AtlasService.GetRecord is not implemented"))
+func (UnimplementedServiceHandler) Ping(context.Context, *connect.Request[PingRequest]) (*connect.Response[PingResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("Service.Ping is not implemented"))
+}
+
+func (UnimplementedServiceHandler) GetRecord(context.Context, *connect.Request[GetRecordRequest]) (*connect.Response[GetRecordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("Service.GetRecord is not implemented"))
 }

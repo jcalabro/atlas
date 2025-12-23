@@ -21,6 +21,78 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type PingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingRequest) Reset() {
+	*x = PingRequest{}
+	mi := &file_atlas_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingRequest) ProtoMessage() {}
+
+func (x *PingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
+func (*PingRequest) Descriptor() ([]byte, []int) {
+	return file_atlas_proto_rawDescGZIP(), []int{0}
+}
+
+type PingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingResponse) Reset() {
+	*x = PingResponse{}
+	mi := &file_atlas_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingResponse) ProtoMessage() {}
+
+func (x *PingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
+func (*PingResponse) Descriptor() ([]byte, []int) {
+	return file_atlas_proto_rawDescGZIP(), []int{1}
+}
+
 // GetRecordRequest specifies which record to retrieve.
 // Exactly one of uri or (did + collection + rkey) must be provided.
 type GetRecordRequest struct {
@@ -42,7 +114,7 @@ type GetRecordRequest struct {
 
 func (x *GetRecordRequest) Reset() {
 	*x = GetRecordRequest{}
-	mi := &file_atlas_proto_msgTypes[0]
+	mi := &file_atlas_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -54,7 +126,7 @@ func (x *GetRecordRequest) String() string {
 func (*GetRecordRequest) ProtoMessage() {}
 
 func (x *GetRecordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[0]
+	mi := &file_atlas_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -67,7 +139,7 @@ func (x *GetRecordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRecordRequest.ProtoReflect.Descriptor instead.
 func (*GetRecordRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{0}
+	return file_atlas_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetRecordRequest) GetUri() string {
@@ -109,7 +181,7 @@ type GetRecordResponse struct {
 
 func (x *GetRecordResponse) Reset() {
 	*x = GetRecordResponse{}
-	mi := &file_atlas_proto_msgTypes[1]
+	mi := &file_atlas_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -121,7 +193,7 @@ func (x *GetRecordResponse) String() string {
 func (*GetRecordResponse) ProtoMessage() {}
 
 func (x *GetRecordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[1]
+	mi := &file_atlas_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -134,7 +206,7 @@ func (x *GetRecordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRecordResponse.ProtoReflect.Descriptor instead.
 func (*GetRecordResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{1}
+	return file_atlas_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *GetRecordResponse) GetRecord() *Record {
@@ -172,7 +244,7 @@ type Record struct {
 
 func (x *Record) Reset() {
 	*x = Record{}
-	mi := &file_atlas_proto_msgTypes[2]
+	mi := &file_atlas_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -184,7 +256,7 @@ func (x *Record) String() string {
 func (*Record) ProtoMessage() {}
 
 func (x *Record) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[2]
+	mi := &file_atlas_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -197,7 +269,7 @@ func (x *Record) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Record.ProtoReflect.Descriptor instead.
 func (*Record) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{2}
+	return file_atlas_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Record) GetUri() string {
@@ -260,7 +332,9 @@ var File_atlas_proto protoreflect.FileDescriptor
 
 const file_atlas_proto_rawDesc = "" +
 	"\n" +
-	"\vatlas.proto\x12\x05atlas\"\xa6\x01\n" +
+	"\vatlas.proto\x12\x05atlas\"\r\n" +
+	"\vPingRequest\"\x0e\n" +
+	"\fPingResponse\"\xa6\x01\n" +
 	"\x10GetRecordRequest\x12\x15\n" +
 	"\x03uri\x18\x01 \x01(\tH\x00R\x03uri\x88\x01\x01\x12\x15\n" +
 	"\x03did\x18\x02 \x01(\tH\x01R\x03did\x88\x01\x01\x12#\n" +
@@ -287,8 +361,9 @@ const file_atlas_proto_rawDesc = "" +
 	"indexed_at\x18\a \x01(\x03R\tindexedAt\x12\"\n" +
 	"\n" +
 	"created_at\x18\b \x01(\x03H\x00R\tcreatedAt\x88\x01\x01B\r\n" +
-	"\v_created_at2N\n" +
-	"\fAtlasService\x12>\n" +
+	"\v_created_at2z\n" +
+	"\aService\x12/\n" +
+	"\x04Ping\x12\x12.atlas.PingRequest\x1a\x13.atlas.PingResponse\x12>\n" +
 	"\tGetRecord\x12\x17.atlas.GetRecordRequest\x1a\x18.atlas.GetRecordResponseB%Z#github.com/jcalabro/atlas/pkg/atlasb\x06proto3"
 
 var (
@@ -303,18 +378,22 @@ func file_atlas_proto_rawDescGZIP() []byte {
 	return file_atlas_proto_rawDescData
 }
 
-var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_atlas_proto_goTypes = []any{
-	(*GetRecordRequest)(nil),  // 0: atlas.GetRecordRequest
-	(*GetRecordResponse)(nil), // 1: atlas.GetRecordResponse
-	(*Record)(nil),            // 2: atlas.Record
+	(*PingRequest)(nil),       // 0: atlas.PingRequest
+	(*PingResponse)(nil),      // 1: atlas.PingResponse
+	(*GetRecordRequest)(nil),  // 2: atlas.GetRecordRequest
+	(*GetRecordResponse)(nil), // 3: atlas.GetRecordResponse
+	(*Record)(nil),            // 4: atlas.Record
 }
 var file_atlas_proto_depIdxs = []int32{
-	2, // 0: atlas.GetRecordResponse.record:type_name -> atlas.Record
-	0, // 1: atlas.AtlasService.GetRecord:input_type -> atlas.GetRecordRequest
-	1, // 2: atlas.AtlasService.GetRecord:output_type -> atlas.GetRecordResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
+	4, // 0: atlas.GetRecordResponse.record:type_name -> atlas.Record
+	0, // 1: atlas.Service.Ping:input_type -> atlas.PingRequest
+	2, // 2: atlas.Service.GetRecord:input_type -> atlas.GetRecordRequest
+	1, // 3: atlas.Service.Ping:output_type -> atlas.PingResponse
+	3, // 4: atlas.Service.GetRecord:output_type -> atlas.GetRecordResponse
+	3, // [3:5] is the sub-list for method output_type
+	1, // [1:3] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -325,15 +404,15 @@ func file_atlas_proto_init() {
 	if File_atlas_proto != nil {
 		return
 	}
-	file_atlas_proto_msgTypes[0].OneofWrappers = []any{}
 	file_atlas_proto_msgTypes[2].OneofWrappers = []any{}
+	file_atlas_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atlas_proto_rawDesc), len(file_atlas_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

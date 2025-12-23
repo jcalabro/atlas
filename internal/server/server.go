@@ -4,17 +4,21 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	_ "net/http/pprof"
 
-	"github.com/apple/foundationdb/bindings/go/src/fdb"
+	"connectrpc.com/connect"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
+	"github.com/jcalabro/atlas/internal/storage"
+	"github.com/jcalabro/atlas/pkg/atlas"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -36,7 +40,7 @@ type server struct {
 
 	shutOnce sync.Once
 
-	fdb fdb.Database
+	store *storage.Store
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -59,7 +63,7 @@ func Run(ctx context.Context, args *Args) error {
 	s := &server{
 		log:    slog.Default().With(slog.String("component", "server")),
 		tracer: otel.Tracer("atlas.server"),
-		fdb:    db,
+		store:  storage.New(db),
 	}
 
 	cancelOnce := &sync.Once{}
@@ -105,25 +109,78 @@ func Run(ctx context.Context, args *Args) error {
 func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Args) error {
 	defer cancel()
 
-	return nil
+	mux := http.NewServeMux()
+	path, handler := atlas.NewServiceHandler(s)
+	mux.Handle(path, handler)
 
-	// srv := &http.Server{
-	// 	Handler:        mux,
-	// 	Addr:           args.Addr,
-	// 	ErrorLog:       slog.NewLogLogger(s.log.Handler(), slog.LevelError),
-	// 	WriteTimeout:   args.Timeout,
-	// 	ReadTimeout:    args.Timeout,
-	// 	MaxHeaderBytes: httpMaxHeaderBytes,
-	// 	TLSConfig: &tls.Config{
-	// 		NextProtos:   []string{"h2"}, // HTTP2 *only*.
-	// 		MinVersion:   tls.VersionTLS13,
-	// 		Certificates: []tls.Certificate{*certificate},
-	// 	},
-	// }
-	// if err := http2.ConfigureServer(s.grpcServer, &http2.Server{
-	// 	MaxConcurrentStreams: 100_000,
-	// 	MaxHandlers:          1_000_000, // Not actually implemented?
-	// }); err != nil {
-	// 	return nil, fmt.Errorf("failed to configure HTTP2 server: %w", err)
-	// }
+	srv := &http.Server{
+		Handler:      mux,
+		Addr:         args.Addr,
+		ErrorLog:     slog.NewLogLogger(s.log.Handler(), slog.LevelError),
+		WriteTimeout: args.WriteTimeout,
+		ReadTimeout:  args.ReadTimeout,
+	}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			s.log.Error("shutdown error", "err", err)
+		}
+	}()
+
+	s.log.Info("server listening", "addr", args.Addr)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("listen: %w", err)
+	}
+	return nil
+}
+
+func (s *server) GetRecord(ctx context.Context, req *connect.Request[atlas.GetRecordRequest]) (*connect.Response[atlas.GetRecordResponse], error) {
+	var did, collection, rkey string
+
+	if req.Msg.Uri != nil {
+		parts, err := parseATURI(*req.Msg.Uri)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		did, collection, rkey = parts[0], parts[1], parts[2]
+	} else if req.Msg.Did != nil && req.Msg.Collection != nil && req.Msg.Rkey != nil {
+		did, collection, rkey = *req.Msg.Did, *req.Msg.Collection, *req.Msg.Rkey
+	} else {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("must provide uri or (did, collection, rkey)"))
+	}
+
+	rec, err := s.store.GetRecord(did, collection, rkey)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if rec == nil {
+		return connect.NewResponse(&atlas.GetRecordResponse{}), nil
+	}
+
+	return connect.NewResponse(&atlas.GetRecordResponse{
+		Record: &atlas.Record{
+			Uri:        fmt.Sprintf("at://%s/%s/%s", did, collection, rkey),
+			Cid:        rec.CID,
+			Did:        did,
+			Collection: collection,
+			Rkey:       rkey,
+			Value:      rec.Record,
+			IndexedAt:  rec.IndexedAt,
+		},
+	}), nil
+}
+
+func parseATURI(uri string) ([]string, error) {
+	if !strings.HasPrefix(uri, "at://") {
+		return nil, fmt.Errorf("invalid AT URI: must start with at://")
+	}
+	rest := strings.TrimPrefix(uri, "at://")
+	parts := strings.SplitN(rest, "/", 3)
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid AT URI: expected at://did/collection/rkey")
+	}
+	return parts, nil
 }

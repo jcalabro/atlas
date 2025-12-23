@@ -20,7 +20,7 @@ just fdbcli          # Connect to local FoundationDB CLI
 
 Atlas is a Go backend for building AT Protocol AppViews such as Bluesky, using FoundationDB as its storage layer. Atlas is a database that allows you to build production-grade ATProto apps that are fast and scalable quickly, easily, and securely.
 
-### Main Components
+## Main Components
 
 - **cmd/atlas/main.go**: CLI entry point using urfave/cli with two commands:
   - `server`: Primary ConnectRPC server to which clients will connect and send queries
@@ -31,11 +31,16 @@ Atlas is a Go backend for building AT Protocol AppViews such as Bluesky, using F
 - **internal/metrics/**: Prometheus metrics and OpenTelemetry tracing setup
 - **internal/env/**: Environment configuration and version handling
 
-### Key Patterns
+## Key Patterns
 
 - **Observability**: All components use structured logging (slog), OpenTelemetry tracing, and Prometheus metrics
 - **Signal handling**: Graceful shutdown on SIGINT/SIGTERM to allow in-progress queries to finish
 - **Error handling**: Wrapped errors with context via `fmt.Errorf`. Errors must be handled properly and robustly.
+
+## Style
+
+- We write relatively basic, straightforward go. We don't try to get too fancy.
+- We don't add too many comments, especially in the middle of functions. However, we always document user-facing APIs with godoc style comments (i.e. public types we expect others to import)
 
 ## Development Setup
 
