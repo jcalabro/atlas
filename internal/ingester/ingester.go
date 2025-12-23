@@ -151,9 +151,7 @@ func (i *ingester) handleIdentityEvent(ctx context.Context, ident *tap.IdentityE
 		attribute.Bool("is_active", ident.IsActive),
 		attribute.String("status", ident.Status),
 	))
-	defer func() {
-		metrics.SpanEnd(span, err)
-	}()
+	defer func() { metrics.SpanEnd(span, err) }()
 
 	i.log.Info("GOT ONE", "type", "identity")
 
@@ -168,9 +166,7 @@ func (i *ingester) handleRecordEvent(ctx context.Context, rec *tap.RecordEvent) 
 		attribute.String("action", rec.Action),
 		attribute.Bool("live", rec.Live),
 	))
-	defer func() {
-		metrics.SpanEnd(span, err)
-	}()
+	defer func() { metrics.SpanEnd(span, err) }()
 
 	i.log.Info("GOT ONE", "type", "record")
 
