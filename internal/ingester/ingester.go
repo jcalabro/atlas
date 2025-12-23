@@ -14,6 +14,7 @@ import (
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
 	"github.com/jcalabro/atlas/internal/storage"
+	"github.com/jcalabro/atlas/pkg/atlas"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -153,8 +154,14 @@ func (i *ingester) handleIdentityEvent(ctx context.Context, ident *tap.IdentityE
 	))
 	defer func() { metrics.SpanEnd(span, err) }()
 
-	if err := i.store.PutIdentity(ident.DID, ident.Handle, ident.Status, ident.IsActive); err != nil {
-		return fmt.Errorf("put identity: %w", err)
+	actor := &atlas.Actor{
+		Did:      ident.DID,
+		Handle:   ident.Handle,
+		IsActive: ident.IsActive,
+		Status:   ident.Status,
+	}
+	if err := i.store.PutActor(actor); err != nil {
+		return fmt.Errorf("put actor: %w", err)
 	}
 	return nil
 }
@@ -171,7 +178,16 @@ func (i *ingester) handleRecordEvent(ctx context.Context, rec *tap.RecordEvent) 
 
 	switch rec.Action {
 	case "create", "update":
-		if err := i.store.PutRecord(rec.DID, rec.Collection, rec.Rkey, rec.CID, rec.Record); err != nil {
+		record := &atlas.Record{
+			Uri:        fmt.Sprintf("at://%s/%s/%s", rec.DID, rec.Collection, rec.Rkey),
+			Cid:        rec.CID,
+			Did:        rec.DID,
+			Collection: rec.Collection,
+			Rkey:       rec.Rkey,
+			Value:      rec.Record,
+			IndexedAt:  time.Now().Unix(),
+		}
+		if err := i.store.PutRecord(record); err != nil {
 			return fmt.Errorf("put record: %w", err)
 		}
 	case "delete":

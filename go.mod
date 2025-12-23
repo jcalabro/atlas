@@ -5,6 +5,7 @@ go 1.25
 require (
 	connectrpc.com/connect v1.19.1
 	github.com/apple/foundationdb/bindings/go v0.0.0-20250221231555-5140696da2df
+	github.com/bluesky-social/go-util v0.0.0-20251012040650-2ebbf57f5934
 	github.com/bluesky-social/indigo v0.0.0-20251222014515-29c54adca2ec
 	github.com/prometheus/client_golang v1.23.2
 	github.com/urfave/cli/v3 v3.6.1

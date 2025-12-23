@@ -4,69 +4,184 @@ package atlas;
 
 option go_package = "github.com/jcalabro/atlas/pkg/atlas";
 
-// AtlasService provides read access to ATProto records stored in Atlas.
 service Service {
-  // Sends a ping to the server
   rpc Ping(PingRequest) returns (PingResponse);
-
-  // GetRecord retrieves a single record by its AT URI or by its component parts.
-  rpc GetRecord(GetRecordRequest) returns (GetRecordResponse);
+  rpc GetRecords(GetRecordsRequest) returns (GetRecordsResponse);
+  rpc GetActor(GetActorRequest) returns (GetActorResponse);
+  rpc Query(QueryRequest) returns (QueryResponse);
 }
 
 message PingRequest {}
 message PingResponse {}
 
-// GetRecordRequest specifies which record to retrieve.
-// Exactly one of uri or (did + collection + rkey) must be provided.
-message GetRecordRequest {
-  // The full AT Protocol URI of the record.
-  // Format: at://did/collection/rkey
-  // Example: at://did:plc:abc123/app.bsky.feed.post/3jxh5pdlwfs2d
-  optional string uri = 1;
+// -----------------------------------------------------------------------------
+// Lookups
+// -----------------------------------------------------------------------------
 
-  // Alternative: specify record by its component parts.
-  // The DID of the repository owner (e.g., "did:plc:abc123").
-  optional string did = 2;
-
-  // The collection NSID (e.g., "app.bsky.feed.post").
-  optional string collection = 3;
-
-  // The record key within the collection (e.g., "3jxh5pdlwfs2d").
-  optional string rkey = 4;
+message GetRecordsRequest {
+  repeated string uris = 1;
 }
 
-// GetRecordResponse contains the retrieved record.
-message GetRecordResponse {
-  // The record data. Nil if not found.
-  Record record = 1;
+message GetRecordsResponse {
+  repeated Record records = 1;
 }
 
-// Record represents a single ATProto record.
+message GetActorRequest {
+  string did = 1;
+}
+
+message GetActorResponse {
+  Actor actor = 1;
+}
+
+// -----------------------------------------------------------------------------
+// Query
+// -----------------------------------------------------------------------------
+
+message QueryRequest {
+  // Filter to specific collections. Empty means all.
+  repeated string collections = 1;
+
+  // Filter to specific DIDs. Empty means all.
+  repeated string dids = 2;
+
+  // Filter expression for WHERE clause.
+  Filter filter = 3;
+
+  // Ordering. Default is indexed_at DESC.
+  repeated Sort sorts = 4;
+
+  // Max records to return. Default 100, max 1000.
+  int32 limit = 5;
+
+  // Cursor for pagination (opaque string from previous response).
+  string cursor = 6;
+
+  // What additional data to resolve and include.
+  ResolveOptions resolve = 7;
+}
+
+message ResolveOptions {
+  // Include author Identity for each record.
+  bool authors = 1;
+
+  // Resolve strongRef fields and include referenced records.
+  // Scans record values for {uri, cid} objects and fetches them.
+  bool refs = 2;
+
+  // Max depth for recursive ref resolution. Default 1.
+  int32 refs_depth = 3;
+
+  // Only resolve refs at these JSON paths (e.g., "reply.parent", "subject").
+  // Empty means auto-detect all strongRefs.
+  repeated string ref_paths = 4;
+
+  // Also resolve authors of resolved refs.
+  bool refs_authors = 5;
+}
+
+message QueryResponse {
+  repeated Record records = 1;
+  string cursor = 2;
+
+  // Resolved references, deduplicated by URI.
+  map<string, Record> refs = 3;
+
+  // Actors, deduplicated by DID.
+  map<string, Actor> actors = 4;
+}
+
+// -----------------------------------------------------------------------------
+// Filter expressions
+// -----------------------------------------------------------------------------
+
+message Filter {
+  oneof filter {
+    Condition condition = 1;
+    AndFilter and = 2;
+    OrFilter or = 3;
+    NotFilter not = 4;
+  }
+}
+
+message Condition {
+  // Field path using dot notation for nested JSON.
+  // Special: "did", "collection", "rkey", "cid", "indexed_at", "created_at"
+  // Value fields: "value.text", "value.reply.parent.uri", etc.
+  string field = 1;
+  Op op = 2;
+  Value value = 3;
+}
+
+enum Op {
+  OP_UNSPECIFIED = 0;
+  OP_EQ = 1;
+  OP_NE = 2;
+  OP_LT = 3;
+  OP_LE = 4;
+  OP_GT = 5;
+  OP_GE = 6;
+  OP_CONTAINS = 7;
+  OP_STARTS_WITH = 8;
+  OP_IN = 9;
+  OP_EXISTS = 10;
+}
+
+message Value {
+  oneof value {
+    string string_value = 1;
+    int64 int_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+    ListValue list_value = 5;
+  }
+}
+
+message ListValue {
+  repeated Value values = 1;
+}
+
+message AndFilter {
+  repeated Filter filters = 1;
+}
+
+message OrFilter {
+  repeated Filter filters = 1;
+}
+
+message NotFilter {
+  Filter filter = 1;
+}
+
+message Sort {
+  string field = 1;
+  SortDir dir = 2;
+}
+
+enum SortDir {
+  SORT_DIR_UNSPECIFIED = 0;
+  SORT_DIR_ASC = 1;
+  SORT_DIR_DESC = 2;
+}
+
+// -----------------------------------------------------------------------------
+// Core types
+// -----------------------------------------------------------------------------
+
 message Record {
-  // The AT Protocol URI of this record.
-  // Format: at://did/collection/rkey
   string uri = 1;
-
-  // The CID (Content Identifier) of this record version.
   string cid = 2;
-
-  // The DID of the repository owner.
   string did = 3;
-
-  // The collection NSID (e.g., "app.bsky.feed.post").
   string collection = 4;
-
-  // The record key within the collection.
   string rkey = 5;
-
-  // The record value as JSON-encoded bytes.
-  // ATProto records are natively CBOR, but JSON is more convenient for clients.
   bytes value = 6;
-
-  // Unix timestamp (seconds) when this record was indexed by Atlas.
   int64 indexed_at = 7;
-
-  // Unix timestamp (seconds) when this record was created, if available.
-  // This is extracted from the record's createdAt field when present.
   optional int64 created_at = 8;
+}
+
+message Actor {
+  string did = 1;
+  string handle = 2;
+  bool is_active = 3;
+  string status = 4;
 }

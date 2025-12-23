@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -137,50 +136,7 @@ func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Arg
 	return nil
 }
 
-func (s *server) GetRecord(ctx context.Context, req *connect.Request[atlas.GetRecordRequest]) (*connect.Response[atlas.GetRecordResponse], error) {
-	var did, collection, rkey string
-
-	if req.Msg.Uri != nil {
-		parts, err := parseATURI(*req.Msg.Uri)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
-		}
-		did, collection, rkey = parts[0], parts[1], parts[2]
-	} else if req.Msg.Did != nil && req.Msg.Collection != nil && req.Msg.Rkey != nil {
-		did, collection, rkey = *req.Msg.Did, *req.Msg.Collection, *req.Msg.Rkey
-	} else {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("must provide uri or (did, collection, rkey)"))
-	}
-
-	rec, err := s.store.GetRecord(did, collection, rkey)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	if rec == nil {
-		return connect.NewResponse(&atlas.GetRecordResponse{}), nil
-	}
-
-	return connect.NewResponse(&atlas.GetRecordResponse{
-		Record: &atlas.Record{
-			Uri:        fmt.Sprintf("at://%s/%s/%s", did, collection, rkey),
-			Cid:        rec.CID,
-			Did:        did,
-			Collection: collection,
-			Rkey:       rkey,
-			Value:      rec.Record,
-			IndexedAt:  rec.IndexedAt,
-		},
-	}), nil
-}
-
-func parseATURI(uri string) ([]string, error) {
-	if !strings.HasPrefix(uri, "at://") {
-		return nil, fmt.Errorf("invalid AT URI: must start with at://")
-	}
-	rest := strings.TrimPrefix(uri, "at://")
-	parts := strings.SplitN(rest, "/", 3)
-	if len(parts) != 3 {
-		return nil, fmt.Errorf("invalid AT URI: expected at://did/collection/rkey")
-	}
-	return parts, nil
+func (s *server) Query(ctx context.Context, req *connect.Request[atlas.QueryRequest]) (*connect.Response[atlas.QueryResponse], error) {
+	// TODO: implement query execution
+	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("query not yet implemented"))
 }

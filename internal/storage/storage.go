@@ -1,12 +1,13 @@
 package storage
 
 import (
-	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/apple/foundationdb/bindings/go/src/fdb/tuple"
+	"github.com/jcalabro/atlas/internal/at"
+	"github.com/jcalabro/atlas/pkg/atlas"
+	"google.golang.org/protobuf/proto"
 )
 
 type Store struct {
@@ -17,30 +18,50 @@ func New(db fdb.Database) *Store {
 	return &Store{db: db}
 }
 
-type StoredRecord struct {
-	CID       string          `json:"cid"`
-	Record    json.RawMessage `json:"record"`
-	IndexedAt int64           `json:"indexed_at"`
-}
+func transaction[T any](s *Store, fn func(tx fdb.Transaction) (T, error)) (T, error) {
+	var t T
 
-type StoredIdentity struct {
-	Handle   string `json:"handle"`
-	IsActive bool   `json:"is_active"`
-	Status   string `json:"status"`
-}
-
-func (s *Store) PutRecord(did, collection, rkey, cid string, record json.RawMessage) error {
-	key := fdb.Key(tuple.Tuple{"r", did, collection, rkey}.Pack())
-	val := StoredRecord{
-		CID:       cid,
-		Record:    record,
-		IndexedAt: time.Now().Unix(),
+	resI, err := s.db.Transact(func(tx fdb.Transaction) (any, error) {
+		return fn(tx)
+	})
+	if err != nil {
+		return t, err
 	}
-	data, err := json.Marshal(val)
+
+	res, ok := resI.(T)
+	if !ok {
+		return t, fmt.Errorf("failed to cast transaction result %T to %T", resI, t)
+	}
+
+	return res, nil
+}
+
+func readTransaction[T any](s *Store, fn func(tx fdb.ReadTransaction) (T, error)) (T, error) {
+	var t T
+
+	resI, err := s.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
+		return fn(tx)
+	})
+	if err != nil {
+		return t, err
+	}
+
+	res, ok := resI.(T)
+	if !ok {
+		return t, fmt.Errorf("failed to cast read transaction result %T to %T", resI, t)
+	}
+
+	return res, nil
+}
+
+func (s *Store) PutRecord(rec *atlas.Record) error {
+	key := fdb.Key(tuple.Tuple{"r", rec.Did, rec.Collection, rec.Rkey}.Pack())
+	data, err := proto.Marshal(rec)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = s.db.Transact(func(tx fdb.Transaction) (any, error) {
+
+	_, err = transaction(s, func(tx fdb.Transaction) (any, error) {
 		tx.Set(key, data)
 		return nil, nil
 	})
@@ -49,65 +70,80 @@ func (s *Store) PutRecord(did, collection, rkey, cid string, record json.RawMess
 
 func (s *Store) DeleteRecord(did, collection, rkey string) error {
 	key := fdb.Key(tuple.Tuple{"r", did, collection, rkey}.Pack())
-	_, err := s.db.Transact(func(tx fdb.Transaction) (any, error) {
+	_, err := transaction(s, func(tx fdb.Transaction) (any, error) {
 		tx.Clear(key)
 		return nil, nil
 	})
 	return err
 }
 
-func (s *Store) GetRecord(did, collection, rkey string) (*StoredRecord, error) {
-	key := fdb.Key(tuple.Tuple{"r", did, collection, rkey}.Pack())
-	val, err := s.db.Transact(func(tx fdb.Transaction) (any, error) {
-		return tx.Get(key).Get()
+func (s *Store) GetRecords(uris []at.URI) ([]*atlas.Record, error) {
+	bufs, err := readTransaction(s, func(tx fdb.ReadTransaction) ([][]byte, error) {
+		futures := make([]fdb.FutureByteSlice, 0, len(uris))
+		for _, uri := range uris {
+			key := tuple.Tuple{"r", uri.DID, uri.Collection, uri.Rkey}.Pack()
+			futures = append(futures, tx.Get(fdb.Key(key)))
+		}
+
+		results := make([][]byte, 0, len(futures))
+		for _, future := range futures {
+			val, err := future.Get()
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, val)
+		}
+
+		return results, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get record: %w", err)
+		return nil, fmt.Errorf("get records: %w", err)
 	}
-	data, ok := val.([]byte)
-	if !ok || len(data) == 0 {
-		return nil, nil
+
+	records := make([]*atlas.Record, 0, len(uris))
+	for _, buf := range bufs {
+		if len(buf) == 0 {
+			continue
+		}
+		var rec atlas.Record
+		if err := proto.Unmarshal(buf, &rec); err != nil {
+			return nil, fmt.Errorf("unmarshal record: %w", err)
+		}
+		records = append(records, &rec)
 	}
-	var rec StoredRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return nil, fmt.Errorf("unmarshal record: %w", err)
-	}
-	return &rec, nil
+
+	return records, nil
 }
 
-func (s *Store) PutIdentity(did, handle, status string, isActive bool) error {
-	key := fdb.Key(tuple.Tuple{"i", did}.Pack())
-	val := StoredIdentity{
-		Handle:   handle,
-		IsActive: isActive,
-		Status:   status,
-	}
-	data, err := json.Marshal(val)
+func (s *Store) PutActor(actor *atlas.Actor) error {
+	key := fdb.Key(tuple.Tuple{"a", actor.Did}.Pack())
+
+	data, err := proto.Marshal(actor)
 	if err != nil {
-		return fmt.Errorf("marshal identity: %w", err)
+		return fmt.Errorf("marshal actor: %w", err)
 	}
-	_, err = s.db.Transact(func(tx fdb.Transaction) (any, error) {
+
+	_, err = transaction(s, func(tx fdb.Transaction) (any, error) {
 		tx.Set(key, data)
 		return nil, nil
 	})
 	return err
 }
 
-func (s *Store) GetIdentity(did string) (*StoredIdentity, error) {
-	key := fdb.Key(tuple.Tuple{"i", did}.Pack())
-	val, err := s.db.Transact(func(tx fdb.Transaction) (any, error) {
+func (s *Store) GetActor(did string) (*atlas.Actor, error) {
+	key := fdb.Key(tuple.Tuple{"a", did}.Pack())
+	data, err := readTransaction(s, func(tx fdb.ReadTransaction) ([]byte, error) {
 		return tx.Get(key).Get()
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get identity: %w", err)
+		return nil, fmt.Errorf("get actor: %w", err)
 	}
-	data, ok := val.([]byte)
-	if !ok || len(data) == 0 {
+	if len(data) == 0 {
 		return nil, nil
 	}
-	var ident StoredIdentity
-	if err := json.Unmarshal(data, &ident); err != nil {
-		return nil, fmt.Errorf("unmarshal identity: %w", err)
+	var actor atlas.Actor
+	if err := proto.Unmarshal(data, &actor); err != nil {
+		return nil, fmt.Errorf("unmarshal actor: %w", err)
 	}
-	return &ident, nil
+	return &actor, nil
 }
