@@ -59,7 +59,7 @@ func main() {
 		Commands: []*cli.Command{
 			{
 				Name:        "server",
-				Description: "Runs the primary user-facing PDS and ConnectRPC server",
+				Description: "Runs the primary user-facing ConnectRPC server",
 				Flags: append(fdbFlags,
 					&cli.StringFlag{
 						Name:  "addr",
