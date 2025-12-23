@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package atlas;
+
+option go_package = "github.com/jcalabro/atlas/pkg/atlas";
+
+// AtlasService provides read access to ATProto records stored in Atlas.
+service AtlasService {
+  // GetRecord retrieves a single record by its AT URI or by its component parts.
+  rpc GetRecord(GetRecordRequest) returns (GetRecordResponse);
+}
+
+// GetRecordRequest specifies which record to retrieve.
+// Exactly one of uri or (did + collection + rkey) must be provided.
+message GetRecordRequest {
+  // The full AT Protocol URI of the record.
+  // Format: at://did/collection/rkey
+  // Example: at://did:plc:abc123/app.bsky.feed.post/3jxh5pdlwfs2d
+  optional string uri = 1;
+
+  // Alternative: specify record by its component parts.
+  // The DID of the repository owner (e.g., "did:plc:abc123").
+  optional string did = 2;
+
+  // The collection NSID (e.g., "app.bsky.feed.post").
+  optional string collection = 3;
+
+  // The record key within the collection (e.g., "3jxh5pdlwfs2d").
+  optional string rkey = 4;
+}
+
+// GetRecordResponse contains the retrieved record.
+message GetRecordResponse {
+  // The record data. Nil if not found.
+  Record record = 1;
+}
+
+// Record represents a single ATProto record.
+message Record {
+  // The AT Protocol URI of this record.
+  // Format: at://did/collection/rkey
+  string uri = 1;
+
+  // The CID (Content Identifier) of this record version.
+  string cid = 2;
+
+  // The DID of the repository owner.
+  string did = 3;
+
+  // The collection NSID (e.g., "app.bsky.feed.post").
+  string collection = 4;
+
+  // The record key within the collection.
+  string rkey = 5;
+
+  // The record value as JSON-encoded bytes.
+  // ATProto records are natively CBOR, but JSON is more convenient for clients.
+  bytes value = 6;
+
+  // Unix timestamp (seconds) when this record was indexed by Atlas.
+  int64 indexed_at = 7;
+
+  // Unix timestamp (seconds) when this record was created, if available.
+  // This is extracted from the record's createdAt field when present.
+  optional int64 created_at = 8;
+}
