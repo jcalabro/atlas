@@ -137,6 +137,58 @@ func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Arg
 }
 
 func (s *server) Query(ctx context.Context, req *connect.Request[atlas.QueryRequest]) (*connect.Response[atlas.QueryResponse], error) {
-	// TODO: implement query execution
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("query not yet implemented"))
+	// Currently only support single DID + single collection queries
+	if len(req.Msg.Dids) != 1 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("exactly one DID required"))
+	}
+	if len(req.Msg.Collections) != 1 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("exactly one collection required"))
+	}
+
+	// Filter and sorts not yet implemented
+	if req.Msg.Filter != nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("filter not yet implemented"))
+	}
+	if len(req.Msg.Sorts) > 0 {
+		return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("custom sorts not yet implemented"))
+	}
+
+	did := req.Msg.Dids[0]
+	collection := req.Msg.Collections[0]
+	limit := int(req.Msg.Limit)
+	cursor := req.Msg.Cursor
+
+	records, nextCursor, err := s.store.ListRecords(did, collection, limit, cursor)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	resp := &atlas.QueryResponse{
+		Records: records,
+		Cursor:  nextCursor,
+	}
+
+	// Resolve authors if requested
+	if req.Msg.Resolve != nil && req.Msg.Resolve.Authors && len(records) > 0 {
+		dids := make([]string, 0, len(records))
+		seen := make(map[string]bool)
+		for _, rec := range records {
+			if !seen[rec.Did] {
+				seen[rec.Did] = true
+				dids = append(dids, rec.Did)
+			}
+		}
+
+		actors, err := s.store.GetActors(dids)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+
+		resp.Actors = make(map[string]*atlas.Actor, len(actors))
+		for _, actor := range actors {
+			resp.Actors[actor.Did] = actor
+		}
+	}
+
+	return connect.NewResponse(resp), nil
 }

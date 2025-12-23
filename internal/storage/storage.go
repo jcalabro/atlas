@@ -56,6 +56,7 @@ func readTransaction[T any](s *Store, fn func(tx fdb.ReadTransaction) (T, error)
 
 func (s *Store) PutRecord(rec *atlas.Record) error {
 	key := fdb.Key(tuple.Tuple{"r", rec.Did, rec.Collection, rec.Rkey}.Pack())
+
 	data, err := proto.Marshal(rec)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
@@ -70,6 +71,7 @@ func (s *Store) PutRecord(rec *atlas.Record) error {
 
 func (s *Store) DeleteRecord(did, collection, rkey string) error {
 	key := fdb.Key(tuple.Tuple{"r", did, collection, rkey}.Pack())
+
 	_, err := transaction(s, func(tx fdb.Transaction) (any, error) {
 		tx.Clear(key)
 		return nil, nil
@@ -113,6 +115,77 @@ func (s *Store) GetRecords(uris []at.URI) ([]*atlas.Record, error) {
 	}
 
 	return records, nil
+}
+
+func (s *Store) ListRecords(did, collection string, limit int, cursor string) ([]*atlas.Record, string, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
+	prefix := tuple.Tuple{"r", did, collection}
+
+	// Transaction only does FDB I/O, returns raw bytes
+	bufs, err := readTransaction(s, func(tx fdb.ReadTransaction) ([][]byte, error) {
+		var keyRange fdb.KeyRange
+		if cursor == "" {
+			var err error
+			keyRange, err = fdb.PrefixRange(prefix.Pack())
+			if err != nil {
+				return nil, fmt.Errorf("prefix range: %w", err)
+			}
+		} else {
+			// Cursor is the rkey - build key to scan before it
+			prefixRange, err := fdb.PrefixRange(prefix.Pack())
+			if err != nil {
+				return nil, fmt.Errorf("prefix range: %w", err)
+			}
+			cursorKey := tuple.Tuple{"r", did, collection, cursor}.Pack()
+			keyRange = fdb.KeyRange{
+				Begin: prefixRange.Begin,
+				End:   fdb.Key(cursorKey),
+			}
+		}
+
+		rangeResult := tx.GetRange(keyRange, fdb.RangeOptions{
+			Limit:   limit,
+			Reverse: true,
+		})
+
+		iter := rangeResult.Iterator()
+		var results [][]byte
+		for iter.Advance() {
+			kv, err := iter.Get()
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, kv.Value)
+		}
+
+		return results, nil
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("list records: %w", err)
+	}
+
+	// Unmarshal outside transaction
+	records := make([]*atlas.Record, 0, len(bufs))
+	for _, buf := range bufs {
+		if len(buf) == 0 {
+			continue
+		}
+		var rec atlas.Record
+		if err := proto.Unmarshal(buf, &rec); err != nil {
+			return nil, "", fmt.Errorf("unmarshal record: %w", err)
+		}
+		records = append(records, &rec)
+	}
+
+	var nextCursor string
+	if len(records) == limit {
+		nextCursor = records[len(records)-1].Rkey
+	}
+
+	return records, nextCursor, nil
 }
 
 func (s *Store) PutActor(actor *atlas.Actor) error {
