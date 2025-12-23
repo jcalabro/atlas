@@ -130,20 +130,40 @@ func (s *Store) PutActor(actor *atlas.Actor) error {
 	return err
 }
 
-func (s *Store) GetActor(did string) (*atlas.Actor, error) {
-	key := fdb.Key(tuple.Tuple{"a", did}.Pack())
-	data, err := readTransaction(s, func(tx fdb.ReadTransaction) ([]byte, error) {
-		return tx.Get(key).Get()
+func (s *Store) GetActors(dids []string) ([]*atlas.Actor, error) {
+	bufs, err := readTransaction(s, func(tx fdb.ReadTransaction) ([][]byte, error) {
+		futures := make([]fdb.FutureByteSlice, 0, len(dids))
+		for _, did := range dids {
+			key := tuple.Tuple{"a", did}.Pack()
+			futures = append(futures, tx.Get(fdb.Key(key)))
+		}
+
+		results := make([][]byte, 0, len(futures))
+		for _, future := range futures {
+			val, err := future.Get()
+			if err != nil {
+				return nil, err
+			}
+			results = append(results, val)
+		}
+
+		return results, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get actor: %w", err)
+		return nil, fmt.Errorf("get actors: %w", err)
 	}
-	if len(data) == 0 {
-		return nil, nil
+
+	actors := make([]*atlas.Actor, 0, len(dids))
+	for _, buf := range bufs {
+		if len(buf) == 0 {
+			continue
+		}
+		var actor atlas.Actor
+		if err := proto.Unmarshal(buf, &actor); err != nil {
+			return nil, fmt.Errorf("unmarshal actor: %w", err)
+		}
+		actors = append(actors, &actor)
 	}
-	var actor atlas.Actor
-	if err := proto.Unmarshal(data, &actor); err != nil {
-		return nil, fmt.Errorf("unmarshal actor: %w", err)
-	}
-	return &actor, nil
+
+	return actors, nil
 }

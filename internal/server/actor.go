@@ -7,17 +7,13 @@ import (
 	"github.com/jcalabro/atlas/pkg/atlas"
 )
 
-func (s *server) GetActor(ctx context.Context, req *connect.Request[atlas.GetActorRequest]) (*connect.Response[atlas.GetActorResponse], error) {
-	actor, err := s.store.GetActor(req.Msg.Did)
+func (s *server) GetActors(ctx context.Context, req *connect.Request[atlas.GetActorsRequest]) (*connect.Response[atlas.GetActorsResponse], error) {
+	actors, err := s.store.GetActors(req.Msg.Dids)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	if actor == nil {
-		return connect.NewResponse(&atlas.GetActorResponse{}), nil
-	}
-
-	return connect.NewResponse(&atlas.GetActorResponse{
-		Actor: actor,
+	return connect.NewResponse(&atlas.GetActorsResponse{
+		Actors: actors,
 	}), nil
 }

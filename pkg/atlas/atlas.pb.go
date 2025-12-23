@@ -303,27 +303,27 @@ func (x *GetRecordsResponse) GetRecords() []*Record {
 	return nil
 }
 
-type GetActorRequest struct {
+type GetActorsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Did           string                 `protobuf:"bytes,1,opt,name=did,proto3" json:"did,omitempty"`
+	Dids          []string               `protobuf:"bytes,1,rep,name=dids,proto3" json:"dids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetActorRequest) Reset() {
-	*x = GetActorRequest{}
+func (x *GetActorsRequest) Reset() {
+	*x = GetActorsRequest{}
 	mi := &file_atlas_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetActorRequest) String() string {
+func (x *GetActorsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetActorRequest) ProtoMessage() {}
+func (*GetActorsRequest) ProtoMessage() {}
 
-func (x *GetActorRequest) ProtoReflect() protoreflect.Message {
+func (x *GetActorsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_atlas_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -335,39 +335,39 @@ func (x *GetActorRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetActorRequest.ProtoReflect.Descriptor instead.
-func (*GetActorRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetActorsRequest.ProtoReflect.Descriptor instead.
+func (*GetActorsRequest) Descriptor() ([]byte, []int) {
 	return file_atlas_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetActorRequest) GetDid() string {
+func (x *GetActorsRequest) GetDids() []string {
 	if x != nil {
-		return x.Did
+		return x.Dids
 	}
-	return ""
+	return nil
 }
 
-type GetActorResponse struct {
+type GetActorsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Actor         *Actor                 `protobuf:"bytes,1,opt,name=actor,proto3" json:"actor,omitempty"`
+	Actors        []*Actor               `protobuf:"bytes,1,rep,name=actors,proto3" json:"actors,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetActorResponse) Reset() {
-	*x = GetActorResponse{}
+func (x *GetActorsResponse) Reset() {
+	*x = GetActorsResponse{}
 	mi := &file_atlas_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetActorResponse) String() string {
+func (x *GetActorsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetActorResponse) ProtoMessage() {}
+func (*GetActorsResponse) ProtoMessage() {}
 
-func (x *GetActorResponse) ProtoReflect() protoreflect.Message {
+func (x *GetActorsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_atlas_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -379,14 +379,14 @@ func (x *GetActorResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetActorResponse.ProtoReflect.Descriptor instead.
-func (*GetActorResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetActorsResponse.ProtoReflect.Descriptor instead.
+func (*GetActorsResponse) Descriptor() ([]byte, []int) {
 	return file_atlas_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetActorResponse) GetActor() *Actor {
+func (x *GetActorsResponse) GetActors() []*Actor {
 	if x != nil {
-		return x.Actor
+		return x.Actors
 	}
 	return nil
 }
@@ -1356,11 +1356,11 @@ const file_atlas_proto_rawDesc = "" +
 	"\x11GetRecordsRequest\x12\x12\n" +
 	"\x04uris\x18\x01 \x03(\tR\x04uris\"=\n" +
 	"\x12GetRecordsResponse\x12'\n" +
-	"\arecords\x18\x01 \x03(\v2\r.atlas.RecordR\arecords\"#\n" +
-	"\x0fGetActorRequest\x12\x10\n" +
-	"\x03did\x18\x01 \x01(\tR\x03did\"6\n" +
-	"\x10GetActorResponse\x12\"\n" +
-	"\x05actor\x18\x01 \x01(\v2\f.atlas.ActorR\x05actor\"\xed\x01\n" +
+	"\arecords\x18\x01 \x03(\v2\r.atlas.RecordR\arecords\"&\n" +
+	"\x10GetActorsRequest\x12\x12\n" +
+	"\x04dids\x18\x01 \x03(\tR\x04dids\"9\n" +
+	"\x11GetActorsResponse\x12$\n" +
+	"\x06actors\x18\x01 \x03(\v2\f.atlas.ActorR\x06actors\"\xed\x01\n" +
 	"\fQueryRequest\x12 \n" +
 	"\vcollections\x18\x01 \x03(\tR\vcollections\x12\x12\n" +
 	"\x04dids\x18\x02 \x03(\tR\x04dids\x12%\n" +
@@ -1452,12 +1452,12 @@ const file_atlas_proto_rawDesc = "" +
 	"\aSortDir\x12\x18\n" +
 	"\x14SORT_DIR_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fSORT_DIR_ASC\x10\x01\x12\x11\n" +
-	"\rSORT_DIR_DESC\x10\x022\xee\x01\n" +
+	"\rSORT_DIR_DESC\x10\x022\xf1\x01\n" +
 	"\aService\x12/\n" +
 	"\x04Ping\x12\x12.atlas.PingRequest\x1a\x13.atlas.PingResponse\x12A\n" +
 	"\n" +
-	"GetRecords\x12\x18.atlas.GetRecordsRequest\x1a\x19.atlas.GetRecordsResponse\x12;\n" +
-	"\bGetActor\x12\x16.atlas.GetActorRequest\x1a\x17.atlas.GetActorResponse\x122\n" +
+	"GetRecords\x12\x18.atlas.GetRecordsRequest\x1a\x19.atlas.GetRecordsResponse\x12>\n" +
+	"\tGetActors\x12\x17.atlas.GetActorsRequest\x1a\x18.atlas.GetActorsResponse\x122\n" +
 	"\x05Query\x12\x13.atlas.QueryRequest\x1a\x14.atlas.QueryResponseB%Z#github.com/jcalabro/atlas/pkg/atlasb\x06proto3"
 
 var (
@@ -1481,8 +1481,8 @@ var file_atlas_proto_goTypes = []any{
 	(*PingResponse)(nil),       // 3: atlas.PingResponse
 	(*GetRecordsRequest)(nil),  // 4: atlas.GetRecordsRequest
 	(*GetRecordsResponse)(nil), // 5: atlas.GetRecordsResponse
-	(*GetActorRequest)(nil),    // 6: atlas.GetActorRequest
-	(*GetActorResponse)(nil),   // 7: atlas.GetActorResponse
+	(*GetActorsRequest)(nil),   // 6: atlas.GetActorsRequest
+	(*GetActorsResponse)(nil),  // 7: atlas.GetActorsResponse
 	(*QueryRequest)(nil),       // 8: atlas.QueryRequest
 	(*ResolveOptions)(nil),     // 9: atlas.ResolveOptions
 	(*QueryResponse)(nil),      // 10: atlas.QueryResponse
@@ -1501,7 +1501,7 @@ var file_atlas_proto_goTypes = []any{
 }
 var file_atlas_proto_depIdxs = []int32{
 	19, // 0: atlas.GetRecordsResponse.records:type_name -> atlas.Record
-	20, // 1: atlas.GetActorResponse.actor:type_name -> atlas.Actor
+	20, // 1: atlas.GetActorsResponse.actors:type_name -> atlas.Actor
 	11, // 2: atlas.QueryRequest.filter:type_name -> atlas.Filter
 	18, // 3: atlas.QueryRequest.sorts:type_name -> atlas.Sort
 	9,  // 4: atlas.QueryRequest.resolve:type_name -> atlas.ResolveOptions
@@ -1524,11 +1524,11 @@ var file_atlas_proto_depIdxs = []int32{
 	20, // 21: atlas.QueryResponse.ActorsEntry.value:type_name -> atlas.Actor
 	2,  // 22: atlas.Service.Ping:input_type -> atlas.PingRequest
 	4,  // 23: atlas.Service.GetRecords:input_type -> atlas.GetRecordsRequest
-	6,  // 24: atlas.Service.GetActor:input_type -> atlas.GetActorRequest
+	6,  // 24: atlas.Service.GetActors:input_type -> atlas.GetActorsRequest
 	8,  // 25: atlas.Service.Query:input_type -> atlas.QueryRequest
 	3,  // 26: atlas.Service.Ping:output_type -> atlas.PingResponse
 	5,  // 27: atlas.Service.GetRecords:output_type -> atlas.GetRecordsResponse
-	7,  // 28: atlas.Service.GetActor:output_type -> atlas.GetActorResponse
+	7,  // 28: atlas.Service.GetActors:output_type -> atlas.GetActorsResponse
 	10, // 29: atlas.Service.Query:output_type -> atlas.QueryResponse
 	26, // [26:30] is the sub-list for method output_type
 	22, // [22:26] is the sub-list for method input_type

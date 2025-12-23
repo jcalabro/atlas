@@ -7,7 +7,7 @@ option go_package = "github.com/jcalabro/atlas/pkg/atlas";
 service Service {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc GetRecords(GetRecordsRequest) returns (GetRecordsResponse);
-  rpc GetActor(GetActorRequest) returns (GetActorResponse);
+  rpc GetActors(GetActorsRequest) returns (GetActorsResponse);
   rpc Query(QueryRequest) returns (QueryResponse);
 }
 
@@ -26,12 +26,12 @@ message GetRecordsResponse {
   repeated Record records = 1;
 }
 
-message GetActorRequest {
-  string did = 1;
+message GetActorsRequest {
+  repeated string dids = 1;
 }
 
-message GetActorResponse {
-  Actor actor = 1;
+message GetActorsResponse {
+  repeated Actor actors = 1;
 }
 
 // -----------------------------------------------------------------------------

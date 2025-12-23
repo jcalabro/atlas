@@ -36,8 +36,8 @@ const (
 	ServicePingProcedure = "/atlas.Service/Ping"
 	// ServiceGetRecordsProcedure is the fully-qualified name of the Service's GetRecords RPC.
 	ServiceGetRecordsProcedure = "/atlas.Service/GetRecords"
-	// ServiceGetActorProcedure is the fully-qualified name of the Service's GetActor RPC.
-	ServiceGetActorProcedure = "/atlas.Service/GetActor"
+	// ServiceGetActorsProcedure is the fully-qualified name of the Service's GetActors RPC.
+	ServiceGetActorsProcedure = "/atlas.Service/GetActors"
 	// ServiceQueryProcedure is the fully-qualified name of the Service's Query RPC.
 	ServiceQueryProcedure = "/atlas.Service/Query"
 )
@@ -46,7 +46,7 @@ const (
 type ServiceClient interface {
 	Ping(context.Context, *connect.Request[PingRequest]) (*connect.Response[PingResponse], error)
 	GetRecords(context.Context, *connect.Request[GetRecordsRequest]) (*connect.Response[GetRecordsResponse], error)
-	GetActor(context.Context, *connect.Request[GetActorRequest]) (*connect.Response[GetActorResponse], error)
+	GetActors(context.Context, *connect.Request[GetActorsRequest]) (*connect.Response[GetActorsResponse], error)
 	Query(context.Context, *connect.Request[QueryRequest]) (*connect.Response[QueryResponse], error)
 }
 
@@ -73,10 +73,10 @@ func NewServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 			connect.WithSchema(serviceMethods.ByName("GetRecords")),
 			connect.WithClientOptions(opts...),
 		),
-		getActor: connect.NewClient[GetActorRequest, GetActorResponse](
+		getActors: connect.NewClient[GetActorsRequest, GetActorsResponse](
 			httpClient,
-			baseURL+ServiceGetActorProcedure,
-			connect.WithSchema(serviceMethods.ByName("GetActor")),
+			baseURL+ServiceGetActorsProcedure,
+			connect.WithSchema(serviceMethods.ByName("GetActors")),
 			connect.WithClientOptions(opts...),
 		),
 		query: connect.NewClient[QueryRequest, QueryResponse](
@@ -92,7 +92,7 @@ func NewServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...con
 type serviceClient struct {
 	ping       *connect.Client[PingRequest, PingResponse]
 	getRecords *connect.Client[GetRecordsRequest, GetRecordsResponse]
-	getActor   *connect.Client[GetActorRequest, GetActorResponse]
+	getActors  *connect.Client[GetActorsRequest, GetActorsResponse]
 	query      *connect.Client[QueryRequest, QueryResponse]
 }
 
@@ -106,9 +106,9 @@ func (c *serviceClient) GetRecords(ctx context.Context, req *connect.Request[Get
 	return c.getRecords.CallUnary(ctx, req)
 }
 
-// GetActor calls Service.GetActor.
-func (c *serviceClient) GetActor(ctx context.Context, req *connect.Request[GetActorRequest]) (*connect.Response[GetActorResponse], error) {
-	return c.getActor.CallUnary(ctx, req)
+// GetActors calls Service.GetActors.
+func (c *serviceClient) GetActors(ctx context.Context, req *connect.Request[GetActorsRequest]) (*connect.Response[GetActorsResponse], error) {
+	return c.getActors.CallUnary(ctx, req)
 }
 
 // Query calls Service.Query.
@@ -120,7 +120,7 @@ func (c *serviceClient) Query(ctx context.Context, req *connect.Request[QueryReq
 type ServiceHandler interface {
 	Ping(context.Context, *connect.Request[PingRequest]) (*connect.Response[PingResponse], error)
 	GetRecords(context.Context, *connect.Request[GetRecordsRequest]) (*connect.Response[GetRecordsResponse], error)
-	GetActor(context.Context, *connect.Request[GetActorRequest]) (*connect.Response[GetActorResponse], error)
+	GetActors(context.Context, *connect.Request[GetActorsRequest]) (*connect.Response[GetActorsResponse], error)
 	Query(context.Context, *connect.Request[QueryRequest]) (*connect.Response[QueryResponse], error)
 }
 
@@ -143,10 +143,10 @@ func NewServiceHandler(svc ServiceHandler, opts ...connect.HandlerOption) (strin
 		connect.WithSchema(serviceMethods.ByName("GetRecords")),
 		connect.WithHandlerOptions(opts...),
 	)
-	serviceGetActorHandler := connect.NewUnaryHandler(
-		ServiceGetActorProcedure,
-		svc.GetActor,
-		connect.WithSchema(serviceMethods.ByName("GetActor")),
+	serviceGetActorsHandler := connect.NewUnaryHandler(
+		ServiceGetActorsProcedure,
+		svc.GetActors,
+		connect.WithSchema(serviceMethods.ByName("GetActors")),
 		connect.WithHandlerOptions(opts...),
 	)
 	serviceQueryHandler := connect.NewUnaryHandler(
@@ -161,8 +161,8 @@ func NewServiceHandler(svc ServiceHandler, opts ...connect.HandlerOption) (strin
 			servicePingHandler.ServeHTTP(w, r)
 		case ServiceGetRecordsProcedure:
 			serviceGetRecordsHandler.ServeHTTP(w, r)
-		case ServiceGetActorProcedure:
-			serviceGetActorHandler.ServeHTTP(w, r)
+		case ServiceGetActorsProcedure:
+			serviceGetActorsHandler.ServeHTTP(w, r)
 		case ServiceQueryProcedure:
 			serviceQueryHandler.ServeHTTP(w, r)
 		default:
@@ -182,8 +182,8 @@ func (UnimplementedServiceHandler) GetRecords(context.Context, *connect.Request[
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("Service.GetRecords is not implemented"))
 }
 
-func (UnimplementedServiceHandler) GetActor(context.Context, *connect.Request[GetActorRequest]) (*connect.Response[GetActorResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("Service.GetActor is not implemented"))
+func (UnimplementedServiceHandler) GetActors(context.Context, *connect.Request[GetActorsRequest]) (*connect.Response[GetActorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("Service.GetActors is not implemented"))
 }
 
 func (UnimplementedServiceHandler) Query(context.Context, *connect.Request[QueryRequest]) (*connect.Response[QueryResponse], error) {
