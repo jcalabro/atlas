@@ -2,6 +2,7 @@ package pds
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -143,14 +144,18 @@ func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Arg
 	return nil
 }
 
-func writeOK(w http.ResponseWriter, msg string, args ...any) {
-	writeCode(w, http.StatusOK, msg, args...)
+func (s *server) writeJSON(w http.ResponseWriter, resp any) {
+	s.writeJSONWithCode(w, http.StatusOK, resp)
 }
 
-func writeCode(w http.ResponseWriter, code int, msg string, args ...any) {
+func (s *server) writeJSONWithCode(w http.ResponseWriter, code int, resp any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	fmt.Fprintf(w, msg, args...) // nolint:errcheck
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.log.Error("failed to json encode and write repsonse", "err", err)
+		return
+	}
 }
 
 func (s *server) router() *http.ServeMux {

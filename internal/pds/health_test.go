@@ -19,5 +19,5 @@ func TestHandleHealth(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.Equal(t, "application/json", w.Header().Get("Content-Type"))
-	require.JSONEq(t, `{"status":"ok"}`, w.Body.String())
+	require.JSONEq(t, `{"version":"unset"}`, w.Body.String())
 }
