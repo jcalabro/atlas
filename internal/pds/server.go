@@ -15,7 +15,6 @@ import (
 
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
-	"github.com/jcalabro/atlas/internal/storage"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -41,7 +40,7 @@ type server struct {
 
 	shutdownOnce sync.Once
 
-	store *storage.Store
+	db *foundation.DB
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -56,7 +55,7 @@ func Run(ctx context.Context, args *Args) error {
 		return err
 	}
 
-	db, err := foundation.Open(args.FDB)
+	db, err := foundation.New(args.FDB)
 	if err != nil {
 		return err
 	}
@@ -64,7 +63,7 @@ func Run(ctx context.Context, args *Args) error {
 	s := &server{
 		log:    slog.Default().With(slog.String("component", "server")),
 		tracer: otel.Tracer(serviceName),
-		store:  storage.New(db),
+		db:     db,
 	}
 
 	cancelOnce := &sync.Once{}
