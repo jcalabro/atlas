@@ -109,7 +109,10 @@ func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Arg
 	defer cancel()
 
 	mux := http.NewServeMux()
-	path, handler := atlas.NewServiceHandler(s)
+	path, handler := atlas.NewServiceHandler(s, connect.WithInterceptors(
+		loggingInterceptor(s.log),
+		metricsInterceptor(),
+	))
 	mux.Handle(path, handler)
 
 	srv := &http.Server{

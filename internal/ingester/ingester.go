@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/tap"
+	"github.com/jcalabro/atlas/internal/env"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
 	"github.com/jcalabro/atlas/internal/storage"
@@ -123,17 +124,19 @@ func (i *ingester) processMessage(ctx context.Context, ev *tap.Event) (err error
 	status := metrics.StatusError
 	action := "unknown"
 	defer func() {
-		metrics.IngestMessages.WithLabelValues(action, status).Inc()
-		metrics.IngestMessageDuration.WithLabelValues(status).Observe(time.Since(start).Seconds())
+		metrics.IngestMessages.WithLabelValues(env.Version, action, status).Inc()
+		metrics.IngestMessageDuration.WithLabelValues(action, status).Observe(time.Since(start).Seconds())
 		metrics.SpanEnd(span, err)
 	}()
 
 	switch pl := ev.Payload().(type) {
 	case *tap.IdentityEvent:
+		action = "identity"
 		if err := i.handleIdentityEvent(ctx, pl); err != nil {
 			return fmt.Errorf("failed to handle identity event: %w", err)
 		}
 	case *tap.RecordEvent:
+		action = "record"
 		if err := i.handleRecordEvent(ctx, pl); err != nil {
 			return fmt.Errorf("failed to handle record event: %w", err)
 		}
