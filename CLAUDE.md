@@ -1,45 +1,55 @@
 # CLAUDE.md
 
+@README.md
+
 ## Relevant Build Commands
 
 ```bash
-just                 # Default: lint and test
-just up              # Start FoundationDB cluster (Docker)
-just down            # Stop FoundationDB cluster
-just lint            # Run golangci-lint
-just test            # Run tests with race detector
-just t               # Run tests without race detector
-just t ./internal/ingester/...  # Run tests for specific package
-just run atlas server   # Run with race detector
-just r atlas server     # Run without race detector
-just build-protos    # Generate protobuf sources with buf
-just fdbcli          # Connect to local FoundationDB CLI
+$ just --list
+Available recipes:
+    build-protos       # Generates protobuf sources
+    cover              # run `just test` first, then run this to view test coverage
+    default            # Lints and runs all tests
+    down               # Tears down the local development dependencies
+    fdbcli             # Connects to the local foundationdb developement server
+    install-tools      # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
+    lint *ARGS="./..." # Lints the code
+    r *ARGS            # Builds and runs the Go executable
+    run *ARGS          # Builds and runs the Go executable with the race detector enabled
+    t *ARGS="./..."    # Runs the tests
+    test *ARGS="./..." # Runs the tests with the race detector enabled
+    up                 # Stands up local development dependencies in docker
 ```
 
-## Architecture
+Typically, to test, you should run `just`. This will run the linter and all tests with the race detector enabled.
 
-Atlas is a Go backend for building AT Protocol AppViews such as Bluesky, using FoundationDB as its storage layer. Atlas is a database that allows you to build production-grade ATProto apps that are fast and scalable quickly, easily, and securely.
+To build and run a go executable, you should typically run `just run pds`.
+
+All commands should use the `justfile`. It is quite rare to need to reach directly for the `go` compiler, or other tools. The `justfile` is designed to be comprehensive.
+
+To update protobuf types, edit the `.proto` file, then run `just build-protos` to build the go source files.
 
 ## Main Components
 
-- **cmd/atlas/main.go**: CLI entry point using urfave/cli with two commands:
-  - `server`: Primary ConnectRPC server to which clients will connect and send queries
-  - `ingester`: Tap websocket consumer for atproto events that come off the PDS and firehose, as well as private data from the open source atproto compoenent "bsync" (bsync integration not yet implemented)
-- **internal/foundation/**: FoundationDB client initialization and configuration
-- **internal/ingester/**: Consumes TAP messages from ATProto, processes `IdentityEvent` and `RecordEvent` types
-- **internal/server/**: HTTP server with ConnectRPC endpoints (WIP)
-- **internal/metrics/**: Prometheus metrics and OpenTelemetry tracing setup
+- **cmd/atlas/main.go**: CLI entry point using urfave/cli with the following commands:
+  - `pds`: Runs the PDS webserver
+  - `--help`: Displays the help command and exits
+- **internal/at/**: Functions and types that allow us to interface with ATProto
 - **internal/env/**: Environment configuration and version handling
+- **internal/foundation/**: FoundationDB client initialization and configuration
+- **internal/metrics/**: Prometheus metrics and OpenTelemetry tracing setup
+- **internal/pds/**: HTTP server that implements the ATProto PDS XRPC interface
+- **internal/types/**: Protobuf generated types
 
 ## Key Patterns
 
 - **Observability**: All components use structured logging (slog), OpenTelemetry tracing, and Prometheus metrics
 - **Signal handling**: Graceful shutdown on SIGINT/SIGTERM to allow in-progress queries to finish
-- **Error handling**: Wrapped errors with context via `fmt.Errorf`. Errors must be handled properly and robustly.
+- **Error handling**: Wrapped errors with context via `fmt.Errorf`. Errors must be handled properly and robustly. Never use `panic`.
 
 ## Style
 
-- We write relatively basic, straightforward go. We don't try to get too fancy.
+- We write relatively basic, straightforward go. We try not to get fancy.
 - We don't add too many comments, especially in the middle of functions. However, we always document user-facing APIs with godoc style comments (i.e. public types we expect others to import)
 
 ## Development Setup
@@ -49,11 +59,3 @@ Requires:
 - FoundationDB 7.3.63 clients installed locally
 - Docker for local FoundationDB cluster
   - Note that the docker-based foundation cluster only works on Linux. On macOS (the other supported development platform), developers must install and run FoundationDB manually.
-
-## Linting
-
-Uses golangci-lint v2 with:
-- `paralleltest` enabled - tests must use `t.Parallel()`
-- `gocritic` with all checks enabled
-- Type assertion error checking required
-- `interface{}` auto-rewritten to `any`

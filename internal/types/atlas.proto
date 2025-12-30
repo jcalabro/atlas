@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package atlas;
+package types;
 
-option go_package = "github.com/jcalabro/atlas/pkg/atlas";
+option go_package = "github.com/jcalabro/atlas/internal/types";
 
 service Service {
   rpc Ping(PingRequest) returns (PingResponse);

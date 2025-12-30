@@ -6,11 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/jcalabro/atlas/internal/foundation"
-	"github.com/jcalabro/atlas/internal/ingester"
-	"github.com/jcalabro/atlas/internal/server"
 	"github.com/urfave/cli/v3"
 )
 
@@ -57,70 +53,7 @@ func main() {
 			return ctx, nil
 		},
 		Commands: []*cli.Command{
-			{
-				Name:        "server",
-				Description: "Runs the primary user-facing ConnectRPC server",
-				Flags: append(fdbFlags,
-					&cli.StringFlag{
-						Name:  "addr",
-						Usage: "Bind address of the primary HTTP server",
-						Value: "0.0.0.0:2866",
-					},
-					&cli.StringFlag{
-						Name:  "metrics-addr",
-						Usage: "Bind address of the metrics/pprof HTTP server (empty string to disable)",
-						Value: "0.0.0.0:6060",
-					},
-					&cli.DurationFlag{
-						Name:  "read-timeout",
-						Usage: "Primary HTTP server read timeout",
-						Value: 5 * time.Second,
-					},
-					&cli.DurationFlag{
-						Name:  "write-timeout",
-						Usage: "Primary HTTP server write timeout",
-						Value: 5 * time.Second,
-					},
-				),
-				Action: func(ctx context.Context, c *cli.Command) error {
-					return server.Run(ctx, &server.Args{
-						Addr:         c.String("addr"),
-						MetricsAddr:  c.String("metrics-addr"),
-						ReadTimeout:  c.Duration("read-timeout"),
-						WriteTimeout: c.Duration("write-timeout"),
-						FDB: foundation.Config{
-							ClusterFile: c.String("fdb-cluster-file"),
-							APIVersion:  c.Int("fdb-api-version"),
-						},
-					})
-				},
-			},
-			{
-				Name:        "ingester",
-				Description: "Runs the tap websocket ingester",
-				Flags: append(fdbFlags,
-					&cli.StringFlag{
-						Name:  "tap-addr",
-						Usage: "Websocket address of the tap ingestion server",
-						Value: "ws://localhost:2480/channel",
-					},
-					&cli.StringFlag{
-						Name:  "metrics-addr",
-						Usage: "Bind address of the metrics/pprof HTTP server (empty string to disable)",
-						Value: "0.0.0.0:6061",
-					},
-				),
-				Action: func(ctx context.Context, c *cli.Command) error {
-					return ingester.Run(ctx, &ingester.Args{
-						TapAddr:     c.String("tap-addr"),
-						MetricsAddr: c.String("metrics-addr"),
-						FDB: foundation.Config{
-							ClusterFile: c.String("fdb-cluster-file"),
-							APIVersion:  c.Int("fdb-api-version"),
-						},
-					})
-				},
-			},
+			pdsCmd,
 		},
 	}
 

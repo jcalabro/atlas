@@ -4,7 +4,7 @@
 // 	protoc        (unknown)
 // source: atlas.proto
 
-package atlas
+package types
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -763,7 +763,7 @@ type Condition struct {
 	// Special: "did", "collection", "rkey", "cid", "indexed_at", "created_at"
 	// Value fields: "value.text", "value.reply.parent.uri", etc.
 	Field         string `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
-	Op            Op     `protobuf:"varint,2,opt,name=op,proto3,enum=atlas.Op" json:"op,omitempty"`
+	Op            Op     `protobuf:"varint,2,opt,name=op,proto3,enum=types.Op" json:"op,omitempty"`
 	Value         *Value `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1129,7 +1129,7 @@ func (x *NotFilter) GetFilter() *Filter {
 type Sort struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Field         string                 `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
-	Dir           SortDir                `protobuf:"varint,2,opt,name=dir,proto3,enum=atlas.SortDir" json:"dir,omitempty"`
+	Dir           SortDir                `protobuf:"varint,2,opt,name=dir,proto3,enum=types.SortDir" json:"dir,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1350,25 +1350,25 @@ var File_atlas_proto protoreflect.FileDescriptor
 
 const file_atlas_proto_rawDesc = "" +
 	"\n" +
-	"\vatlas.proto\x12\x05atlas\"\r\n" +
+	"\vatlas.proto\x12\x05types\"\r\n" +
 	"\vPingRequest\"\x0e\n" +
 	"\fPingResponse\"'\n" +
 	"\x11GetRecordsRequest\x12\x12\n" +
 	"\x04uris\x18\x01 \x03(\tR\x04uris\"=\n" +
 	"\x12GetRecordsResponse\x12'\n" +
-	"\arecords\x18\x01 \x03(\v2\r.atlas.RecordR\arecords\"&\n" +
+	"\arecords\x18\x01 \x03(\v2\r.types.RecordR\arecords\"&\n" +
 	"\x10GetActorsRequest\x12\x12\n" +
 	"\x04dids\x18\x01 \x03(\tR\x04dids\"9\n" +
 	"\x11GetActorsResponse\x12$\n" +
-	"\x06actors\x18\x01 \x03(\v2\f.atlas.ActorR\x06actors\"\xed\x01\n" +
+	"\x06actors\x18\x01 \x03(\v2\f.types.ActorR\x06actors\"\xed\x01\n" +
 	"\fQueryRequest\x12 \n" +
 	"\vcollections\x18\x01 \x03(\tR\vcollections\x12\x12\n" +
 	"\x04dids\x18\x02 \x03(\tR\x04dids\x12%\n" +
-	"\x06filter\x18\x03 \x01(\v2\r.atlas.FilterR\x06filter\x12!\n" +
-	"\x05sorts\x18\x04 \x03(\v2\v.atlas.SortR\x05sorts\x12\x14\n" +
+	"\x06filter\x18\x03 \x01(\v2\r.types.FilterR\x06filter\x12!\n" +
+	"\x05sorts\x18\x04 \x03(\v2\v.types.SortR\x05sorts\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06cursor\x18\x06 \x01(\tR\x06cursor\x12/\n" +
-	"\aresolve\x18\a \x01(\v2\x15.atlas.ResolveOptionsR\aresolve\"\x9d\x01\n" +
+	"\aresolve\x18\a \x01(\v2\x15.types.ResolveOptionsR\aresolve\"\x9d\x01\n" +
 	"\x0eResolveOptions\x12\x18\n" +
 	"\aauthors\x18\x01 \x01(\bR\aauthors\x12\x12\n" +
 	"\x04refs\x18\x02 \x01(\bR\x04refs\x12\x1d\n" +
@@ -1377,26 +1377,26 @@ const file_atlas_proto_rawDesc = "" +
 	"\tref_paths\x18\x04 \x03(\tR\brefPaths\x12!\n" +
 	"\frefs_authors\x18\x05 \x01(\bR\vrefsAuthors\"\xcf\x02\n" +
 	"\rQueryResponse\x12'\n" +
-	"\arecords\x18\x01 \x03(\v2\r.atlas.RecordR\arecords\x12\x16\n" +
+	"\arecords\x18\x01 \x03(\v2\r.types.RecordR\arecords\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\tR\x06cursor\x122\n" +
-	"\x04refs\x18\x03 \x03(\v2\x1e.atlas.QueryResponse.RefsEntryR\x04refs\x128\n" +
-	"\x06actors\x18\x04 \x03(\v2 .atlas.QueryResponse.ActorsEntryR\x06actors\x1aF\n" +
+	"\x04refs\x18\x03 \x03(\v2\x1e.types.QueryResponse.RefsEntryR\x04refs\x128\n" +
+	"\x06actors\x18\x04 \x03(\v2 .types.QueryResponse.ActorsEntryR\x06actors\x1aF\n" +
 	"\tRefsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12#\n" +
-	"\x05value\x18\x02 \x01(\v2\r.atlas.RecordR\x05value:\x028\x01\x1aG\n" +
+	"\x05value\x18\x02 \x01(\v2\r.types.RecordR\x05value:\x028\x01\x1aG\n" +
 	"\vActorsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\"\n" +
-	"\x05value\x18\x02 \x01(\v2\f.atlas.ActorR\x05value:\x028\x01\"\xb3\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\f.types.ActorR\x05value:\x028\x01\"\xb3\x01\n" +
 	"\x06Filter\x120\n" +
-	"\tcondition\x18\x01 \x01(\v2\x10.atlas.ConditionH\x00R\tcondition\x12$\n" +
-	"\x03and\x18\x02 \x01(\v2\x10.atlas.AndFilterH\x00R\x03and\x12!\n" +
-	"\x02or\x18\x03 \x01(\v2\x0f.atlas.OrFilterH\x00R\x02or\x12$\n" +
-	"\x03not\x18\x04 \x01(\v2\x10.atlas.NotFilterH\x00R\x03notB\b\n" +
+	"\tcondition\x18\x01 \x01(\v2\x10.types.ConditionH\x00R\tcondition\x12$\n" +
+	"\x03and\x18\x02 \x01(\v2\x10.types.AndFilterH\x00R\x03and\x12!\n" +
+	"\x02or\x18\x03 \x01(\v2\x0f.types.OrFilterH\x00R\x02or\x12$\n" +
+	"\x03not\x18\x04 \x01(\v2\x10.types.NotFilterH\x00R\x03notB\b\n" +
 	"\x06filter\"`\n" +
 	"\tCondition\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x19\n" +
-	"\x02op\x18\x02 \x01(\x0e2\t.atlas.OpR\x02op\x12\"\n" +
-	"\x05value\x18\x03 \x01(\v2\f.atlas.ValueR\x05value\"\xcd\x01\n" +
+	"\x02op\x18\x02 \x01(\x0e2\t.types.OpR\x02op\x12\"\n" +
+	"\x05value\x18\x03 \x01(\v2\f.types.ValueR\x05value\"\xcd\x01\n" +
 	"\x05Value\x12#\n" +
 	"\fstring_value\x18\x01 \x01(\tH\x00R\vstringValue\x12\x1d\n" +
 	"\tint_value\x18\x02 \x01(\x03H\x00R\bintValue\x12#\n" +
@@ -1404,19 +1404,19 @@ const file_atlas_proto_rawDesc = "" +
 	"\n" +
 	"bool_value\x18\x04 \x01(\bH\x00R\tboolValue\x121\n" +
 	"\n" +
-	"list_value\x18\x05 \x01(\v2\x10.atlas.ListValueH\x00R\tlistValueB\a\n" +
+	"list_value\x18\x05 \x01(\v2\x10.types.ListValueH\x00R\tlistValueB\a\n" +
 	"\x05value\"1\n" +
 	"\tListValue\x12$\n" +
-	"\x06values\x18\x01 \x03(\v2\f.atlas.ValueR\x06values\"4\n" +
+	"\x06values\x18\x01 \x03(\v2\f.types.ValueR\x06values\"4\n" +
 	"\tAndFilter\x12'\n" +
-	"\afilters\x18\x01 \x03(\v2\r.atlas.FilterR\afilters\"3\n" +
+	"\afilters\x18\x01 \x03(\v2\r.types.FilterR\afilters\"3\n" +
 	"\bOrFilter\x12'\n" +
-	"\afilters\x18\x01 \x03(\v2\r.atlas.FilterR\afilters\"2\n" +
+	"\afilters\x18\x01 \x03(\v2\r.types.FilterR\afilters\"2\n" +
 	"\tNotFilter\x12%\n" +
-	"\x06filter\x18\x01 \x01(\v2\r.atlas.FilterR\x06filter\">\n" +
+	"\x06filter\x18\x01 \x01(\v2\r.types.FilterR\x06filter\">\n" +
 	"\x04Sort\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12 \n" +
-	"\x03dir\x18\x02 \x01(\x0e2\x0e.atlas.SortDirR\x03dir\"\xda\x01\n" +
+	"\x03dir\x18\x02 \x01(\x0e2\x0e.types.SortDirR\x03dir\"\xda\x01\n" +
 	"\x06Record\x12\x10\n" +
 	"\x03uri\x18\x01 \x01(\tR\x03uri\x12\x10\n" +
 	"\x03cid\x18\x02 \x01(\tR\x03cid\x12\x10\n" +
@@ -1454,11 +1454,11 @@ const file_atlas_proto_rawDesc = "" +
 	"\fSORT_DIR_ASC\x10\x01\x12\x11\n" +
 	"\rSORT_DIR_DESC\x10\x022\xf1\x01\n" +
 	"\aService\x12/\n" +
-	"\x04Ping\x12\x12.atlas.PingRequest\x1a\x13.atlas.PingResponse\x12A\n" +
+	"\x04Ping\x12\x12.types.PingRequest\x1a\x13.types.PingResponse\x12A\n" +
 	"\n" +
-	"GetRecords\x12\x18.atlas.GetRecordsRequest\x1a\x19.atlas.GetRecordsResponse\x12>\n" +
-	"\tGetActors\x12\x17.atlas.GetActorsRequest\x1a\x18.atlas.GetActorsResponse\x122\n" +
-	"\x05Query\x12\x13.atlas.QueryRequest\x1a\x14.atlas.QueryResponseB%Z#github.com/jcalabro/atlas/pkg/atlasb\x06proto3"
+	"GetRecords\x12\x18.types.GetRecordsRequest\x1a\x19.types.GetRecordsResponse\x12>\n" +
+	"\tGetActors\x12\x17.types.GetActorsRequest\x1a\x18.types.GetActorsResponse\x122\n" +
+	"\x05Query\x12\x13.types.QueryRequest\x1a\x14.types.QueryResponseB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
 
 var (
 	file_atlas_proto_rawDescOnce sync.Once
@@ -1475,61 +1475,61 @@ func file_atlas_proto_rawDescGZIP() []byte {
 var file_atlas_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_atlas_proto_goTypes = []any{
-	(Op)(0),                    // 0: atlas.Op
-	(SortDir)(0),               // 1: atlas.SortDir
-	(*PingRequest)(nil),        // 2: atlas.PingRequest
-	(*PingResponse)(nil),       // 3: atlas.PingResponse
-	(*GetRecordsRequest)(nil),  // 4: atlas.GetRecordsRequest
-	(*GetRecordsResponse)(nil), // 5: atlas.GetRecordsResponse
-	(*GetActorsRequest)(nil),   // 6: atlas.GetActorsRequest
-	(*GetActorsResponse)(nil),  // 7: atlas.GetActorsResponse
-	(*QueryRequest)(nil),       // 8: atlas.QueryRequest
-	(*ResolveOptions)(nil),     // 9: atlas.ResolveOptions
-	(*QueryResponse)(nil),      // 10: atlas.QueryResponse
-	(*Filter)(nil),             // 11: atlas.Filter
-	(*Condition)(nil),          // 12: atlas.Condition
-	(*Value)(nil),              // 13: atlas.Value
-	(*ListValue)(nil),          // 14: atlas.ListValue
-	(*AndFilter)(nil),          // 15: atlas.AndFilter
-	(*OrFilter)(nil),           // 16: atlas.OrFilter
-	(*NotFilter)(nil),          // 17: atlas.NotFilter
-	(*Sort)(nil),               // 18: atlas.Sort
-	(*Record)(nil),             // 19: atlas.Record
-	(*Actor)(nil),              // 20: atlas.Actor
-	nil,                        // 21: atlas.QueryResponse.RefsEntry
-	nil,                        // 22: atlas.QueryResponse.ActorsEntry
+	(Op)(0),                    // 0: types.Op
+	(SortDir)(0),               // 1: types.SortDir
+	(*PingRequest)(nil),        // 2: types.PingRequest
+	(*PingResponse)(nil),       // 3: types.PingResponse
+	(*GetRecordsRequest)(nil),  // 4: types.GetRecordsRequest
+	(*GetRecordsResponse)(nil), // 5: types.GetRecordsResponse
+	(*GetActorsRequest)(nil),   // 6: types.GetActorsRequest
+	(*GetActorsResponse)(nil),  // 7: types.GetActorsResponse
+	(*QueryRequest)(nil),       // 8: types.QueryRequest
+	(*ResolveOptions)(nil),     // 9: types.ResolveOptions
+	(*QueryResponse)(nil),      // 10: types.QueryResponse
+	(*Filter)(nil),             // 11: types.Filter
+	(*Condition)(nil),          // 12: types.Condition
+	(*Value)(nil),              // 13: types.Value
+	(*ListValue)(nil),          // 14: types.ListValue
+	(*AndFilter)(nil),          // 15: types.AndFilter
+	(*OrFilter)(nil),           // 16: types.OrFilter
+	(*NotFilter)(nil),          // 17: types.NotFilter
+	(*Sort)(nil),               // 18: types.Sort
+	(*Record)(nil),             // 19: types.Record
+	(*Actor)(nil),              // 20: types.Actor
+	nil,                        // 21: types.QueryResponse.RefsEntry
+	nil,                        // 22: types.QueryResponse.ActorsEntry
 }
 var file_atlas_proto_depIdxs = []int32{
-	19, // 0: atlas.GetRecordsResponse.records:type_name -> atlas.Record
-	20, // 1: atlas.GetActorsResponse.actors:type_name -> atlas.Actor
-	11, // 2: atlas.QueryRequest.filter:type_name -> atlas.Filter
-	18, // 3: atlas.QueryRequest.sorts:type_name -> atlas.Sort
-	9,  // 4: atlas.QueryRequest.resolve:type_name -> atlas.ResolveOptions
-	19, // 5: atlas.QueryResponse.records:type_name -> atlas.Record
-	21, // 6: atlas.QueryResponse.refs:type_name -> atlas.QueryResponse.RefsEntry
-	22, // 7: atlas.QueryResponse.actors:type_name -> atlas.QueryResponse.ActorsEntry
-	12, // 8: atlas.Filter.condition:type_name -> atlas.Condition
-	15, // 9: atlas.Filter.and:type_name -> atlas.AndFilter
-	16, // 10: atlas.Filter.or:type_name -> atlas.OrFilter
-	17, // 11: atlas.Filter.not:type_name -> atlas.NotFilter
-	0,  // 12: atlas.Condition.op:type_name -> atlas.Op
-	13, // 13: atlas.Condition.value:type_name -> atlas.Value
-	14, // 14: atlas.Value.list_value:type_name -> atlas.ListValue
-	13, // 15: atlas.ListValue.values:type_name -> atlas.Value
-	11, // 16: atlas.AndFilter.filters:type_name -> atlas.Filter
-	11, // 17: atlas.OrFilter.filters:type_name -> atlas.Filter
-	11, // 18: atlas.NotFilter.filter:type_name -> atlas.Filter
-	1,  // 19: atlas.Sort.dir:type_name -> atlas.SortDir
-	19, // 20: atlas.QueryResponse.RefsEntry.value:type_name -> atlas.Record
-	20, // 21: atlas.QueryResponse.ActorsEntry.value:type_name -> atlas.Actor
-	2,  // 22: atlas.Service.Ping:input_type -> atlas.PingRequest
-	4,  // 23: atlas.Service.GetRecords:input_type -> atlas.GetRecordsRequest
-	6,  // 24: atlas.Service.GetActors:input_type -> atlas.GetActorsRequest
-	8,  // 25: atlas.Service.Query:input_type -> atlas.QueryRequest
-	3,  // 26: atlas.Service.Ping:output_type -> atlas.PingResponse
-	5,  // 27: atlas.Service.GetRecords:output_type -> atlas.GetRecordsResponse
-	7,  // 28: atlas.Service.GetActors:output_type -> atlas.GetActorsResponse
-	10, // 29: atlas.Service.Query:output_type -> atlas.QueryResponse
+	19, // 0: types.GetRecordsResponse.records:type_name -> types.Record
+	20, // 1: types.GetActorsResponse.actors:type_name -> types.Actor
+	11, // 2: types.QueryRequest.filter:type_name -> types.Filter
+	18, // 3: types.QueryRequest.sorts:type_name -> types.Sort
+	9,  // 4: types.QueryRequest.resolve:type_name -> types.ResolveOptions
+	19, // 5: types.QueryResponse.records:type_name -> types.Record
+	21, // 6: types.QueryResponse.refs:type_name -> types.QueryResponse.RefsEntry
+	22, // 7: types.QueryResponse.actors:type_name -> types.QueryResponse.ActorsEntry
+	12, // 8: types.Filter.condition:type_name -> types.Condition
+	15, // 9: types.Filter.and:type_name -> types.AndFilter
+	16, // 10: types.Filter.or:type_name -> types.OrFilter
+	17, // 11: types.Filter.not:type_name -> types.NotFilter
+	0,  // 12: types.Condition.op:type_name -> types.Op
+	13, // 13: types.Condition.value:type_name -> types.Value
+	14, // 14: types.Value.list_value:type_name -> types.ListValue
+	13, // 15: types.ListValue.values:type_name -> types.Value
+	11, // 16: types.AndFilter.filters:type_name -> types.Filter
+	11, // 17: types.OrFilter.filters:type_name -> types.Filter
+	11, // 18: types.NotFilter.filter:type_name -> types.Filter
+	1,  // 19: types.Sort.dir:type_name -> types.SortDir
+	19, // 20: types.QueryResponse.RefsEntry.value:type_name -> types.Record
+	20, // 21: types.QueryResponse.ActorsEntry.value:type_name -> types.Actor
+	2,  // 22: types.Service.Ping:input_type -> types.PingRequest
+	4,  // 23: types.Service.GetRecords:input_type -> types.GetRecordsRequest
+	6,  // 24: types.Service.GetActors:input_type -> types.GetActorsRequest
+	8,  // 25: types.Service.Query:input_type -> types.QueryRequest
+	3,  // 26: types.Service.Ping:output_type -> types.PingResponse
+	5,  // 27: types.Service.GetRecords:output_type -> types.GetRecordsResponse
+	7,  // 28: types.Service.GetActors:output_type -> types.GetActorsResponse
+	10, // 29: types.Service.Query:output_type -> types.QueryResponse
 	26, // [26:30] is the sub-list for method output_type
 	22, // [22:26] is the sub-list for method input_type
 	22, // [22:22] is the sub-list for extension type_name

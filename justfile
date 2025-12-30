@@ -34,12 +34,12 @@ lint *ARGS="./...":
     golangci-lint run --timeout 1m {{ARGS}}
 
 # Builds and runs the Go executable
-r CMD *ARGS:
-    go run cmd/{{CMD}}/main.go {{ARGS}}
+r *ARGS:
+    go run ./cmd/atlas {{ARGS}}
 
 # Builds and runs the Go executable with the race detector enabled
-run CMD *ARGS:
-    go run -race cmd/{{CMD}}/main.go {{ARGS}}
+run *ARGS:
+    go run -race ./cmd/atlas {{ARGS}}
 
 # Runs the tests
 t *ARGS="./...":
@@ -53,10 +53,6 @@ test *ARGS="./...":
 cover:
     go tool cover -html coverage.out
 
-# Sends a request to a ConnectRPC server (i.e. `just curl pkg/atlas/atlas.proto http://localhost:2866/atlas.Service/Ping`)
-curl PROTO URL DATA="{}":
-    buf curl --protocol connect --schema {{PROTO}} {{URL}} --data '{{DATA}}'
-
 # Connects to the local foundationdb developement server
 fdbcli:
     fdbcli -C foundation.cluster
@@ -66,10 +62,10 @@ build-protos:
     #!/usr/bin/env bash
     set +x
 
-    pushd pkg > /dev/null
+    pushd internal > /dev/null
 
     # generate, then clean up the protos for all connect services
-    for PKG in atlas; do
+    for PKG in types; do
         pushd $PKG > /dev/null
 
         buf lint

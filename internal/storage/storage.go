@@ -6,7 +6,7 @@ import (
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/apple/foundationdb/bindings/go/src/fdb/tuple"
 	"github.com/jcalabro/atlas/internal/at"
-	"github.com/jcalabro/atlas/pkg/atlas"
+	"github.com/jcalabro/atlas/internal/types"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -54,7 +54,7 @@ func readTransaction[T any](s *Store, fn func(tx fdb.ReadTransaction) (T, error)
 	return res, nil
 }
 
-func (s *Store) PutRecord(rec *atlas.Record) error {
+func (s *Store) PutRecord(rec *types.Record) error {
 	key := fdb.Key(tuple.Tuple{"r", rec.Did, rec.Collection, rec.Rkey}.Pack())
 
 	data, err := proto.Marshal(rec)
@@ -79,7 +79,7 @@ func (s *Store) DeleteRecord(did, collection, rkey string) error {
 	return err
 }
 
-func (s *Store) GetRecords(uris []at.URI) ([]*atlas.Record, error) {
+func (s *Store) GetRecords(uris []at.URI) ([]*types.Record, error) {
 	bufs, err := readTransaction(s, func(tx fdb.ReadTransaction) ([][]byte, error) {
 		futures := make([]fdb.FutureByteSlice, 0, len(uris))
 		for _, uri := range uris {
@@ -102,12 +102,12 @@ func (s *Store) GetRecords(uris []at.URI) ([]*atlas.Record, error) {
 		return nil, fmt.Errorf("get records: %w", err)
 	}
 
-	records := make([]*atlas.Record, 0, len(uris))
+	records := make([]*types.Record, 0, len(uris))
 	for _, buf := range bufs {
 		if len(buf) == 0 {
 			continue
 		}
-		var rec atlas.Record
+		var rec types.Record
 		if err := proto.Unmarshal(buf, &rec); err != nil {
 			return nil, fmt.Errorf("unmarshal record: %w", err)
 		}
@@ -117,7 +117,7 @@ func (s *Store) GetRecords(uris []at.URI) ([]*atlas.Record, error) {
 	return records, nil
 }
 
-func (s *Store) ListRecords(did, collection string, limit int, cursor string) ([]*atlas.Record, string, error) {
+func (s *Store) ListRecords(did, collection string, limit int, cursor string) ([]*types.Record, string, error) {
 	if limit <= 0 {
 		limit = 100
 	}
@@ -168,12 +168,12 @@ func (s *Store) ListRecords(did, collection string, limit int, cursor string) ([
 	}
 
 	// Unmarshal outside transaction
-	records := make([]*atlas.Record, 0, len(bufs))
+	records := make([]*types.Record, 0, len(bufs))
 	for _, buf := range bufs {
 		if len(buf) == 0 {
 			continue
 		}
-		var rec atlas.Record
+		var rec types.Record
 		if err := proto.Unmarshal(buf, &rec); err != nil {
 			return nil, "", fmt.Errorf("unmarshal record: %w", err)
 		}
@@ -188,7 +188,7 @@ func (s *Store) ListRecords(did, collection string, limit int, cursor string) ([
 	return records, nextCursor, nil
 }
 
-func (s *Store) PutActor(actor *atlas.Actor) error {
+func (s *Store) PutActor(actor *types.Actor) error {
 	key := fdb.Key(tuple.Tuple{"a", actor.Did}.Pack())
 
 	data, err := proto.Marshal(actor)
@@ -203,7 +203,7 @@ func (s *Store) PutActor(actor *atlas.Actor) error {
 	return err
 }
 
-func (s *Store) GetActors(dids []string) ([]*atlas.Actor, error) {
+func (s *Store) GetActors(dids []string) ([]*types.Actor, error) {
 	bufs, err := readTransaction(s, func(tx fdb.ReadTransaction) ([][]byte, error) {
 		futures := make([]fdb.FutureByteSlice, 0, len(dids))
 		for _, did := range dids {
@@ -226,12 +226,12 @@ func (s *Store) GetActors(dids []string) ([]*atlas.Actor, error) {
 		return nil, fmt.Errorf("get actors: %w", err)
 	}
 
-	actors := make([]*atlas.Actor, 0, len(dids))
+	actors := make([]*types.Actor, 0, len(dids))
 	for _, buf := range bufs {
 		if len(buf) == 0 {
 			continue
 		}
-		var actor atlas.Actor
+		var actor types.Actor
 		if err := proto.Unmarshal(buf, &actor); err != nil {
 			return nil, fmt.Errorf("unmarshal actor: %w", err)
 		}
