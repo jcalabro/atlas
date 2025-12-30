@@ -6,7 +6,7 @@ default: lint test
 
 # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
 install-tools:
-    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.0.2
+    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7.2
 
     go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
     go install github.com/bufbuild/buf/cmd/buf@v1.54.0
