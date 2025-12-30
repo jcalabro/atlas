@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Options for configuring the FDB client
@@ -14,10 +15,11 @@ type Config struct {
 
 // DB allows the caller to query FDB for saving and retrieving data
 type DB struct {
-	db fdb.Database
+	tracer trace.Tracer
+	db     fdb.Database
 }
 
-func New(cfg Config) (*DB, error) {
+func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	if err := fdb.APIVersion(cfg.APIVersion); err != nil {
 		return nil, fmt.Errorf("failed to set fdb client api version: %w", err)
 	}
@@ -42,7 +44,7 @@ func New(cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return &DB{db: db}, nil
+	return &DB{tracer: tracer, db: db}, nil
 }
 
 // Executes the anonymous function as a write transaction, then attempts to cast the return type

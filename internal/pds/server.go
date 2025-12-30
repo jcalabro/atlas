@@ -51,18 +51,24 @@ func (s *server) shutdown(cancel context.CancelFunc) {
 }
 
 func Run(ctx context.Context, args *Args) error {
+	log := slog.Default().With(slog.String("service", serviceName))
+
+	log.Info("starting pds server")
+	defer log.Info("pds server shutdown complete")
+
 	if err := metrics.InitTracing(ctx, serviceName); err != nil {
 		return err
 	}
+	tracer := otel.Tracer(serviceName)
 
-	db, err := foundation.New(args.FDB)
+	db, err := foundation.New(tracer, args.FDB)
 	if err != nil {
 		return err
 	}
 
 	s := &server{
-		log:    slog.Default().With(slog.String("component", "server")),
-		tracer: otel.Tracer(serviceName),
+		log:    log,
+		tracer: tracer,
 		db:     db,
 	}
 
@@ -99,7 +105,6 @@ func Run(ctx context.Context, args *Args) error {
 			return fmt.Errorf("failed to run connect rpc server: %w", err)
 		}
 
-		s.log.Info("server shutdown complete")
 		return nil
 	})
 
@@ -108,6 +113,8 @@ func Run(ctx context.Context, args *Args) error {
 
 func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Args) error {
 	defer cancel()
+
+	mux := s.router()
 
 	srv := &http.Server{
 		Handler:      mux,
@@ -134,4 +141,22 @@ func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Arg
 		return fmt.Errorf("listen: %w", err)
 	}
 	return nil
+}
+
+func writeOK(w http.ResponseWriter, msg string, args ...any) {
+	writeCode(w, http.StatusOK, msg, args...)
+}
+
+func writeCode(w http.ResponseWriter, code int, msg string, args ...any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	fmt.Fprintf(w, msg, args...) // nolint:errcheck
+}
+
+func (s *server) router() *http.ServeMux {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /_health", s.handleHealth)
+
+	return mux
 }
