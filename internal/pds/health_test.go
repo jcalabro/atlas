@@ -14,7 +14,7 @@ func TestHandleHealth(t *testing.T) {
 	w := httptest.NewRecorder()
 	router := testServer(t).router()
 
-	req := httptest.NewRequest(http.MethodGet, "/_health", nil)
+	req := httptest.NewRequest(http.MethodGet, "/xrpc/_health", nil)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)

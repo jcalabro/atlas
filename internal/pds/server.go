@@ -161,7 +161,7 @@ func (s *server) writeJSONWithCode(w http.ResponseWriter, code int, resp any) {
 func (s *server) router() *http.ServeMux {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /_health", s.handleHealth)
+	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
 
 	return mux
 }
