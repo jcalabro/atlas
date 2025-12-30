@@ -11,10 +11,10 @@ import (
 func TestHandleHealth(t *testing.T) {
 	t.Parallel()
 
-	req := httptest.NewRequest(http.MethodGet, "/_health", nil)
 	w := httptest.NewRecorder()
-
 	router := testServer(t).router()
+
+	req := httptest.NewRequest(http.MethodGet, "/_health", nil)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
