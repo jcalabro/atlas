@@ -21,7 +21,7 @@ func ParseURI(uri string) (URI, error) {
 	rest := strings.TrimPrefix(uri, "at://")
 	parts := strings.SplitN(rest, "/", 3)
 	if len(parts) < 3 {
-		return u, fmt.Errorf("invalid AT URI: expected at://did/collection/rkey")
+		return u, fmt.Errorf("invalid AT URI %q", uri)
 	}
 
 	return URI{
