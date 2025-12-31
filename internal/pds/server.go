@@ -14,6 +14,7 @@ import (
 
 	_ "net/http/pprof"
 
+	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
 	"go.opentelemetry.io/otel"
@@ -42,6 +43,8 @@ type server struct {
 	shutdownOnce sync.Once
 
 	db *foundation.DB
+
+	directory identity.Directory
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -71,6 +74,9 @@ func Run(ctx context.Context, args *Args) error {
 		log:    log,
 		tracer: tracer,
 		db:     db,
+
+		// @TODO (jrc): use foundation rather than caching in-memory
+		directory: identity.DefaultDirectory(),
 	}
 
 	cancelOnce := &sync.Once{}
@@ -144,17 +150,21 @@ func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Arg
 	return nil
 }
 
-func (s *server) writePlaintext(w http.ResponseWriter, msg string, args ...any) {
+func (s *server) plaintextOK(w http.ResponseWriter, msg string, args ...any) {
+	s.plaintextWithCode(w, http.StatusOK, msg, args...)
+}
+
+func (s *server) plaintextWithCode(w http.ResponseWriter, code int, msg string, args ...any) {
 	w.Header().Set("Content-Type", "text/plain")
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(code)
 	fmt.Fprintf(w, msg, args...) // nolint:errcheck
 }
 
-func (s *server) writeJSON(w http.ResponseWriter, resp any) {
-	s.writeJSONWithCode(w, http.StatusOK, resp)
+func (s *server) jsonOK(w http.ResponseWriter, resp any) {
+	s.jsonWithCode(w, http.StatusOK, resp)
 }
 
-func (s *server) writeJSONWithCode(w http.ResponseWriter, code int, resp any) {
+func (s *server) jsonWithCode(w http.ResponseWriter, code int, resp any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
@@ -164,11 +174,43 @@ func (s *server) writeJSONWithCode(w http.ResponseWriter, code int, resp any) {
 	}
 }
 
+func (s *server) badRequest(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusBadRequest, err)
+}
+
+func (s *server) notFound(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusNotFound, err)
+}
+
+func (s *server) internalErr(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusInternalServerError, err)
+}
+
+func (s *server) err(w http.ResponseWriter, code int, err error) {
+	type response struct {
+		Err string `json:"msg"`
+	}
+
+	s.jsonWithCode(w, code, &response{
+		Err: err.Error(),
+	})
+}
+
 func (s *server) router() *http.ServeMux {
 	mux := http.NewServeMux()
 
+	//
+	// Misc. routes
+	//
+
 	mux.HandleFunc("GET /ping", s.handlePing)
 	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
+
+	//
+	// PDS routes
+	//
+
+	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
 
 	return mux
 }

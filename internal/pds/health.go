@@ -7,7 +7,7 @@ import (
 )
 
 func (s *server) handlePing(w http.ResponseWriter, r *http.Request) {
-	s.writePlaintext(w, "OK")
+	s.plaintextOK(w, "OK")
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -21,5 +21,5 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusInternalServerError
 	}
 
-	s.writeJSONWithCode(w, status, response{Version: env.Version})
+	s.jsonWithCode(w, status, &response{Version: env.Version})
 }

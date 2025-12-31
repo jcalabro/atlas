@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
@@ -28,9 +29,12 @@ func testServer(t *testing.T) *server {
 	require.NoError(t, err)
 	require.NotNil(t, testDB)
 
+	dir := identity.NewMockDirectory()
+
 	return &server{
-		log:    slog.Default(),
-		tracer: otel.Tracer("test"),
-		db:     testDB,
+		log:       slog.Default(),
+		tracer:    otel.Tracer("test"),
+		db:        testDB,
+		directory: &dir,
 	}
 }
