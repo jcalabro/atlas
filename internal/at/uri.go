@@ -11,6 +11,10 @@ type URI struct {
 	Rkey       string `json:"rkey"`
 }
 
+func (u *URI) String() string {
+	return fmt.Sprintf("at://%s/%s/%s", u.DID, u.Collection, u.Rkey)
+}
+
 func ParseURI(uri string) (URI, error) {
 	var u URI
 

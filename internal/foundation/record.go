@@ -20,7 +20,7 @@ func (db *DB) PutRecord(ctx context.Context, rec *types.Record) error {
 		return fmt.Errorf("marshal record: %w", err)
 	}
 
-	_, err = transaction(db, func(tx fdb.Transaction) (any, error) {
+	_, err = transaction(db.db, func(tx fdb.Transaction) (any, error) {
 		tx.Set(key, data)
 		return nil, nil
 	})
@@ -31,7 +31,7 @@ func (db *DB) PutRecord(ctx context.Context, rec *types.Record) error {
 func (db *DB) GetRecord(uri at.URI) (*types.Record, error) {
 	key := fdb.Key(tuple.Tuple{"r", uri.DID, uri.Collection, uri.Rkey}.Pack())
 
-	buf, err := readTransaction(db, func(tx fdb.ReadTransaction) ([]byte, error) {
+	buf, err := readTransaction(db.db, func(tx fdb.ReadTransaction) ([]byte, error) {
 		return tx.Get(key).Get()
 	})
 	if err != nil {

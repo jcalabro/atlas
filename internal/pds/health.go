@@ -11,5 +11,11 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		Version string `json:"version"`
 	}
 
-	s.writeJSON(w, response{Version: env.Version})
+	status := http.StatusOK
+	if err := s.db.Ping(r.Context()); err != nil {
+		s.log.Error("failed to ping foundation", "err", err)
+		status = http.StatusInternalServerError
+	}
+
+	s.writeJSONWithCode(w, status, response{Version: env.Version})
 }

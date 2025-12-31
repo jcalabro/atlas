@@ -1,6 +1,7 @@
 package foundation
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
@@ -16,7 +17,7 @@ type Config struct {
 // DB allows the caller to query FDB for saving and retrieving data
 type DB struct {
 	tracer trace.Tracer
-	db     fdb.Database
+	db     *fdb.Database
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -24,10 +25,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to set fdb client api version: %w", err)
 	}
 
-	db, err := fdb.OpenDatabase(cfg.ClusterFile)
+	d, err := fdb.OpenDatabase(cfg.ClusterFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize fdb client from cluster file %q: %w", cfg.ClusterFile, err)
 	}
+	db := &d
 
 	if err := db.Options().SetTransactionTimeout(5000); err != nil { // milliseconds
 		return nil, fmt.Errorf("failed to set fdb transaction timeout: %w", err)
@@ -47,11 +49,23 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	return &DB{tracer: tracer, db: db}, nil
 }
 
+// Pings the database to ensure we have connectivity
+func (db *DB) Ping(ctx context.Context) error {
+	_, span := db.tracer.Start(ctx, "Ping")
+	defer span.End()
+
+	_, err := readTransaction(db.db, func(tx fdb.ReadTransaction) ([]byte, error) {
+		return tx.Get(fdb.Key("PING")).Get()
+	})
+
+	return err
+}
+
 // Executes the anonymous function as a write transaction, then attempts to cast the return type
-func transaction[T any](s *DB, fn func(tx fdb.Transaction) (T, error)) (T, error) {
+func transaction[T any](db *fdb.Database, fn func(tx fdb.Transaction) (T, error)) (T, error) {
 	var t T
 
-	resI, err := s.db.Transact(func(tx fdb.Transaction) (any, error) {
+	resI, err := db.Transact(func(tx fdb.Transaction) (any, error) {
 		return fn(tx)
 	})
 	if err != nil {
@@ -67,10 +81,10 @@ func transaction[T any](s *DB, fn func(tx fdb.Transaction) (T, error)) (T, error
 }
 
 // Executes the anonymous function as a read transaction, then attempts to cast the return type
-func readTransaction[T any](s *DB, fn func(tx fdb.ReadTransaction) (T, error)) (T, error) {
+func readTransaction[T any](db *fdb.Database, fn func(tx fdb.ReadTransaction) (T, error)) (T, error) {
 	var t T
 
-	resI, err := s.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
+	resI, err := db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
 		return fn(tx)
 	})
 	if err != nil {
