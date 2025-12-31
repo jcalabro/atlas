@@ -4,13 +4,14 @@ import (
 	"net/http"
 
 	"github.com/jcalabro/atlas/internal/env"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func (s *server) handlePing(w http.ResponseWriter, r *http.Request) {
+func handlePing(s *server, span trace.Span, w http.ResponseWriter, r *http.Request) {
 	s.plaintextOK(w, "OK")
 }
 
-func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func handleHealth(s *server, span trace.Span, w http.ResponseWriter, r *http.Request) {
 	type response struct {
 		Version string `json:"version"`
 	}

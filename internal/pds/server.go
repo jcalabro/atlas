@@ -121,10 +121,8 @@ func Run(ctx context.Context, args *Args) error {
 func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Args) error {
 	defer cancel()
 
-	mux := s.router()
-
 	srv := &http.Server{
-		Handler:      mux,
+		Handler:      s.router(),
 		Addr:         args.Addr,
 		ErrorLog:     slog.NewLogLogger(s.log.Handler(), slog.LevelError),
 		WriteTimeout: args.WriteTimeout,
@@ -196,6 +194,10 @@ func (s *server) err(w http.ResponseWriter, code int, err error) {
 	})
 }
 
+func (s *server) handleFunc(mux *http.ServeMux, pattern string, fn observableHandlerFunc) {
+	mux.HandleFunc(pattern, s.observabilityMiddleware(fn))
+}
+
 func (s *server) router() *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -203,14 +205,14 @@ func (s *server) router() *http.ServeMux {
 	// Misc. routes
 	//
 
-	mux.HandleFunc("GET /ping", s.handlePing)
-	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
+	s.handleFunc(mux, "GET /ping", handlePing)
+	s.handleFunc(mux, "GET /xrpc/_health", handleHealth)
 
 	//
 	// PDS routes
 	//
 
-	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
+	s.handleFunc(mux, "GET /xrpc/com.atproto.identity.resolveHandle", handleResolveHandle)
 
 	return mux
 }

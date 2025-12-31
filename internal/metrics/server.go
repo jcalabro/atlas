@@ -14,6 +14,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+const (
+	StatusOK    = "ok"
+	StatusError = "error"
+)
+
 func RunServer(ctx context.Context, cancel context.CancelFunc, addr string) {
 	if addr == "" {
 		slog.Info("metrics server disabled")

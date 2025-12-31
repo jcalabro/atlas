@@ -8,12 +8,10 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
-func (s *server) handleResolveHandle(w http.ResponseWriter, r *http.Request) {
-	ctx, span := s.tracer.Start(r.Context(), "handleResolveHandle")
-	defer span.End()
-
+func handleResolveHandle(s *server, span trace.Span, w http.ResponseWriter, r *http.Request) {
 	raw := r.URL.Query().Get("handle")
 	span.SetAttributes(attribute.String("handle", raw))
 
@@ -28,7 +26,7 @@ func (s *server) handleResolveHandle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ident, err := s.directory.LookupHandle(ctx, handle)
+	ident, err := s.directory.LookupHandle(r.Context(), handle)
 	if errors.Is(err, identity.ErrHandleNotFound) {
 		s.notFound(w, fmt.Errorf("handle %q not found", raw))
 		return
