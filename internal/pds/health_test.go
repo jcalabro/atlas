@@ -8,6 +8,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHandlePing(t *testing.T) {
+	t.Parallel()
+
+	w := httptest.NewRecorder()
+	router := testServer(t).router()
+
+	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+	require.Equal(t, "OK", w.Body.String())
+}
+
 func TestHandleHealth(t *testing.T) {
 	t.Parallel()
 
