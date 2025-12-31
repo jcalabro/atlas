@@ -144,6 +144,12 @@ func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Arg
 	return nil
 }
 
+func (s *server) writePlaintext(w http.ResponseWriter, msg string, args ...any) {
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, msg, args...) // nolint:errcheck
+}
+
 func (s *server) writeJSON(w http.ResponseWriter, resp any) {
 	s.writeJSONWithCode(w, http.StatusOK, resp)
 }
@@ -161,6 +167,7 @@ func (s *server) writeJSONWithCode(w http.ResponseWriter, code int, resp any) {
 func (s *server) router() *http.ServeMux {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /ping", s.handlePing)
 	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
 
 	return mux

@@ -6,6 +6,10 @@ import (
 	"github.com/jcalabro/atlas/internal/env"
 )
 
+func (s *server) handlePing(w http.ResponseWriter, r *http.Request) {
+	s.writePlaintext(w, "OK")
+}
+
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	type response struct {
 		Version string `json:"version"`
