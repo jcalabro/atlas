@@ -10,7 +10,6 @@ import (
 
 func TestHandlePing(t *testing.T) {
 	t.Parallel()
-
 	w := httptest.NewRecorder()
 	router := testServer(t).router()
 
@@ -24,7 +23,6 @@ func TestHandlePing(t *testing.T) {
 
 func TestHandleHealth(t *testing.T) {
 	t.Parallel()
-
 	w := httptest.NewRecorder()
 	router := testServer(t).router()
 
