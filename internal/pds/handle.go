@@ -8,10 +8,11 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
-func handleResolveHandle(s *server, span trace.Span, w http.ResponseWriter, r *http.Request) {
+func (s *server) handleResolveHandle(w http.ResponseWriter, r *http.Request) {
+	span := spanFromContext(r.Context())
+
 	raw := r.URL.Query().Get("handle")
 	span.SetAttributes(attribute.String("handle", raw))
 

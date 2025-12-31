@@ -1,6 +1,7 @@
 package pds
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -12,7 +13,14 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type observableHandlerFunc func(s *server, span trace.Span, w http.ResponseWriter, r *http.Request)
+type spanContextKey struct{}
+
+func spanFromContext(ctx context.Context) trace.Span {
+	if span, ok := ctx.Value(spanContextKey{}).(trace.Span); ok {
+		return span
+	}
+	return trace.SpanFromContext(ctx)
+}
 
 type responseWriter struct {
 	http.ResponseWriter
@@ -31,14 +39,14 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return size, err
 }
 
-func (s *server) observabilityMiddleware(next observableHandlerFunc) http.HandlerFunc {
+func (s *server) observabilityMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-
 		ctx, span := s.tracer.Start(r.Context(), r.Method+" "+r.URL.Path,
 			trace.WithSpanKind(trace.SpanKindServer),
 		)
 		defer span.End()
+
+		ctx = context.WithValue(ctx, spanContextKey{}, span)
 
 		rw := &responseWriter{
 			ResponseWriter: w,
@@ -59,7 +67,8 @@ func (s *server) observabilityMiddleware(next observableHandlerFunc) http.Handle
 			slog.String("user_agent", r.UserAgent()),
 		)
 
-		next(s, span, rw, r.WithContext(ctx))
+		start := time.Now()
+		next.ServeHTTP(rw, r.WithContext(ctx))
 		duration := time.Since(start).Seconds()
 
 		span.SetAttributes(
