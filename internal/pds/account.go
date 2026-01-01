@@ -59,7 +59,17 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// see if the email is already taken
-	// @TODO (jrc): implement this
+	existingEmail, err := s.db.GetActorByEmail(r.Context(), *in.Email)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get actor by email: %w", err))
+		return
+	}
+	if existingEmail != nil {
+		// @NOTE (jrc): We should send a 200 of some kind here to ensure we're not opening
+		// ourselves up to email enumeration attacks. How can we do this in the XRPC API?
+		s.badRequest(w, fmt.Errorf("invalid create account json"))
+		return
+	}
 
 	signingKey, err := atcrypto.GeneratePrivateKeyK256()
 	if err != nil {
@@ -108,7 +118,7 @@ func validateCreateAccountInput(in *atproto.ServerCreateAccount_Input) error {
 	case in.Email == nil || *in.Email == "":
 		return fmt.Errorf("email is required")
 	case in.Handle == "":
-		return fmt.Errorf("email is required")
+		return fmt.Errorf("handle is required")
 	case in.Password == nil || *in.Password == "":
 		return fmt.Errorf("password is required")
 	}
