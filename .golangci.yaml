@@ -5,8 +5,6 @@ issues:
   max-same-issues: 0
 
 linters:
-  enable:
-    - paralleltest
   settings:
     errcheck:
       check-type-assertions: true

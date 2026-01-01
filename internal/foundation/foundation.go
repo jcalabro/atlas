@@ -6,7 +6,9 @@ import (
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/apple/foundationdb/bindings/go/src/fdb/directory"
+	"github.com/apple/foundationdb/bindings/go/src/fdb/tuple"
 	"go.opentelemetry.io/otel/trace"
+	"google.golang.org/protobuf/proto"
 )
 
 // Options for configuring the FDB client
@@ -20,7 +22,8 @@ type DB struct {
 	tracer trace.Tracer
 	db     *fdb.Database
 
-	actors directory.DirectorySubspace
+	actors      directory.DirectorySubspace
+	didsByEmail directory.DirectorySubspace
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -52,7 +55,12 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 
 	db.actors, err = directory.CreateOrOpen(db.db, []string{"actors"}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create redis directory: %w", err)
+		return nil, fmt.Errorf("failed to create actors directory: %w", err)
+	}
+
+	db.didsByEmail, err = directory.CreateOrOpen(db.db, []string{"dids_by_email"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dids_by_email directory: %w", err)
 	}
 
 	return db, nil
@@ -106,4 +114,23 @@ func readTransaction[T any](db *fdb.Database, fn func(tx fdb.ReadTransaction) (T
 	}
 
 	return res, nil
+}
+
+// Executes the given anonymous function as a read transaction, then attempts to protobuf unmarshal
+// the resulting `[]byte` in to the given `item`
+func readProto(db *fdb.Database, item proto.Message, fn func(tx fdb.ReadTransaction) ([]byte, error)) error {
+	buf, err := readTransaction(db, fn)
+	if err != nil {
+		return err
+	}
+
+	return proto.Unmarshal(buf, item)
+}
+
+func pack(dir directory.DirectorySubspace, keys ...tuple.TupleElement) fdb.Key {
+	tup := tuple.Tuple(keys)
+	if dir == nil {
+		return fdb.Key(tup.Pack())
+	}
+	return dir.Pack(tup)
 }
