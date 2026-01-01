@@ -1,187 +1,22 @@
 syntax = "proto3";
 
 package types;
-
 option go_package = "github.com/jcalabro/atlas/internal/types";
 
-service Service {
-  rpc Ping(PingRequest) returns (PingResponse);
-  rpc GetRecords(GetRecordsRequest) returns (GetRecordsResponse);
-  rpc GetActors(GetActorsRequest) returns (GetActorsResponse);
-  rpc Query(QueryRequest) returns (QueryResponse);
-}
+import "google/protobuf/timestamp.proto";
 
-message PingRequest {}
-message PingResponse {}
-
-// -----------------------------------------------------------------------------
-// Lookups
-// -----------------------------------------------------------------------------
-
-message GetRecordsRequest {
-  repeated string uris = 1;
-}
-
-message GetRecordsResponse {
-  repeated Record records = 1;
-}
-
-message GetActorsRequest {
-  repeated string dids = 1;
-}
-
-message GetActorsResponse {
-  repeated Actor actors = 1;
-}
-
-// -----------------------------------------------------------------------------
-// Query
-// -----------------------------------------------------------------------------
-
-message QueryRequest {
-  // Filter to specific collections. Empty means all.
-  repeated string collections = 1;
-
-  // Filter to specific DIDs. Empty means all.
-  repeated string dids = 2;
-
-  // Filter expression for WHERE clause.
-  Filter filter = 3;
-
-  // Ordering. Default is indexed_at DESC.
-  repeated Sort sorts = 4;
-
-  // Max records to return. Default 100, max 1000.
-  int32 limit = 5;
-
-  // Cursor for pagination (opaque string from previous response).
-  string cursor = 6;
-
-  // What additional data to resolve and include.
-  ResolveOptions resolve = 7;
-}
-
-message ResolveOptions {
-  // Include author Identity for each record.
-  bool authors = 1;
-
-  // Resolve strongRef fields and include referenced records.
-  // Scans record values for {uri, cid} objects and fetches them.
-  bool refs = 2;
-
-  // Max depth for recursive ref resolution. Default 1.
-  int32 refs_depth = 3;
-
-  // Only resolve refs at these JSON paths (e.g., "reply.parent", "subject").
-  // Empty means auto-detect all strongRefs.
-  repeated string ref_paths = 4;
-
-  // Also resolve authors of resolved refs.
-  bool refs_authors = 5;
-}
-
-message QueryResponse {
-  repeated Record records = 1;
-  string cursor = 2;
-
-  // Resolved references, deduplicated by URI.
-  map<string, Record> refs = 3;
-
-  // Actors, deduplicated by DID.
-  map<string, Actor> actors = 4;
-}
-
-// -----------------------------------------------------------------------------
-// Filter expressions
-// -----------------------------------------------------------------------------
-
-message Filter {
-  oneof filter {
-    Condition condition = 1;
-    AndFilter and = 2;
-    OrFilter or = 3;
-    NotFilter not = 4;
-  }
-}
-
-message Condition {
-  // Field path using dot notation for nested JSON.
-  // Special: "did", "collection", "rkey", "cid", "indexed_at", "created_at"
-  // Value fields: "value.text", "value.reply.parent.uri", etc.
-  string field = 1;
-  Op op = 2;
-  Value value = 3;
-}
-
-enum Op {
-  OP_UNSPECIFIED = 0;
-  OP_EQ = 1;
-  OP_NE = 2;
-  OP_LT = 3;
-  OP_LE = 4;
-  OP_GT = 5;
-  OP_GE = 6;
-  OP_CONTAINS = 7;
-  OP_STARTS_WITH = 8;
-  OP_IN = 9;
-  OP_EXISTS = 10;
-}
-
-message Value {
-  oneof value {
-    string string_value = 1;
-    int64 int_value = 2;
-    double double_value = 3;
-    bool bool_value = 4;
-    ListValue list_value = 5;
-  }
-}
-
-message ListValue {
-  repeated Value values = 1;
-}
-
-message AndFilter {
-  repeated Filter filters = 1;
-}
-
-message OrFilter {
-  repeated Filter filters = 1;
-}
-
-message NotFilter {
-  Filter filter = 1;
-}
-
-message Sort {
-  string field = 1;
-  SortDir dir = 2;
-}
-
-enum SortDir {
-  SORT_DIR_UNSPECIFIED = 0;
-  SORT_DIR_ASC = 1;
-  SORT_DIR_DESC = 2;
-}
-
-// -----------------------------------------------------------------------------
-// Core types
-// -----------------------------------------------------------------------------
-
-message Record {
-  string uri = 1;
-  string cid = 2;
-  string did = 3;
-  string collection = 4;
-  string rkey = 5;
-  bytes value = 6;
-  int64 indexed_at = 7;
-  optional int64 created_at = 8;
-}
+//
+// Types stored in FoundationDB
+//
 
 message Actor {
   string did = 1;
-  string handle = 2;
-  bool is_active = 3;
-  string status = 4;
+  google.protobuf.Timestamp created_at = 2;
+  string email = 3;
+  string email_verification_code = 4;
+  bool email_confirmed = 5;
+  bytes password_hash = 6;
+  bytes signing_key = 7;
+  string handle = 8;
+  bool active = 9;
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
+	"github.com/apple/foundationdb/bindings/go/src/fdb/directory"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -18,6 +19,8 @@ type Config struct {
 type DB struct {
 	tracer trace.Tracer
 	db     *fdb.Database
+
+	actors directory.DirectorySubspace
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -29,24 +32,30 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize fdb client from cluster file %q: %w", cfg.ClusterFile, err)
 	}
-	db := &d
 
-	if err := db.Options().SetTransactionTimeout(5000); err != nil { // milliseconds
+	db := &DB{tracer: tracer, db: &d}
+
+	if err := db.db.Options().SetTransactionTimeout(5000); err != nil { // milliseconds
 		return nil, fmt.Errorf("failed to set fdb transaction timeout: %w", err)
 	}
 
-	if err := db.Options().SetTransactionRetryLimit(100); err != nil {
+	if err := db.db.Options().SetTransactionRetryLimit(100); err != nil {
 		return nil, fmt.Errorf("failed to set fdb transaction retry limit: %w", err)
 	}
 
-	_, err = db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
+	_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
 		return tx.Get(fdb.Key("PING")).Get()
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	return &DB{tracer: tracer, db: db}, nil
+	db.actors, err = directory.CreateOrOpen(db.db, []string{"actors"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create redis directory: %w", err)
+	}
+
+	return db, nil
 }
 
 // Pings the database to ensure we have connectivity

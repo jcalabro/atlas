@@ -9,6 +9,7 @@ package types
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -21,1276 +22,24 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type Op int32
-
-const (
-	Op_OP_UNSPECIFIED Op = 0
-	Op_OP_EQ          Op = 1
-	Op_OP_NE          Op = 2
-	Op_OP_LT          Op = 3
-	Op_OP_LE          Op = 4
-	Op_OP_GT          Op = 5
-	Op_OP_GE          Op = 6
-	Op_OP_CONTAINS    Op = 7
-	Op_OP_STARTS_WITH Op = 8
-	Op_OP_IN          Op = 9
-	Op_OP_EXISTS      Op = 10
-)
-
-// Enum value maps for Op.
-var (
-	Op_name = map[int32]string{
-		0:  "OP_UNSPECIFIED",
-		1:  "OP_EQ",
-		2:  "OP_NE",
-		3:  "OP_LT",
-		4:  "OP_LE",
-		5:  "OP_GT",
-		6:  "OP_GE",
-		7:  "OP_CONTAINS",
-		8:  "OP_STARTS_WITH",
-		9:  "OP_IN",
-		10: "OP_EXISTS",
-	}
-	Op_value = map[string]int32{
-		"OP_UNSPECIFIED": 0,
-		"OP_EQ":          1,
-		"OP_NE":          2,
-		"OP_LT":          3,
-		"OP_LE":          4,
-		"OP_GT":          5,
-		"OP_GE":          6,
-		"OP_CONTAINS":    7,
-		"OP_STARTS_WITH": 8,
-		"OP_IN":          9,
-		"OP_EXISTS":      10,
-	}
-)
-
-func (x Op) Enum() *Op {
-	p := new(Op)
-	*p = x
-	return p
-}
-
-func (x Op) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Op) Descriptor() protoreflect.EnumDescriptor {
-	return file_atlas_proto_enumTypes[0].Descriptor()
-}
-
-func (Op) Type() protoreflect.EnumType {
-	return &file_atlas_proto_enumTypes[0]
-}
-
-func (x Op) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Op.Descriptor instead.
-func (Op) EnumDescriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{0}
-}
-
-type SortDir int32
-
-const (
-	SortDir_SORT_DIR_UNSPECIFIED SortDir = 0
-	SortDir_SORT_DIR_ASC         SortDir = 1
-	SortDir_SORT_DIR_DESC        SortDir = 2
-)
-
-// Enum value maps for SortDir.
-var (
-	SortDir_name = map[int32]string{
-		0: "SORT_DIR_UNSPECIFIED",
-		1: "SORT_DIR_ASC",
-		2: "SORT_DIR_DESC",
-	}
-	SortDir_value = map[string]int32{
-		"SORT_DIR_UNSPECIFIED": 0,
-		"SORT_DIR_ASC":         1,
-		"SORT_DIR_DESC":        2,
-	}
-)
-
-func (x SortDir) Enum() *SortDir {
-	p := new(SortDir)
-	*p = x
-	return p
-}
-
-func (x SortDir) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (SortDir) Descriptor() protoreflect.EnumDescriptor {
-	return file_atlas_proto_enumTypes[1].Descriptor()
-}
-
-func (SortDir) Type() protoreflect.EnumType {
-	return &file_atlas_proto_enumTypes[1]
-}
-
-func (x SortDir) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use SortDir.Descriptor instead.
-func (SortDir) EnumDescriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{1}
-}
-
-type PingRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PingRequest) Reset() {
-	*x = PingRequest{}
-	mi := &file_atlas_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PingRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PingRequest) ProtoMessage() {}
-
-func (x *PingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
-func (*PingRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{0}
-}
-
-type PingResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PingResponse) Reset() {
-	*x = PingResponse{}
-	mi := &file_atlas_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PingResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PingResponse) ProtoMessage() {}
-
-func (x *PingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
-func (*PingResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{1}
-}
-
-type GetRecordsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Uris          []string               `protobuf:"bytes,1,rep,name=uris,proto3" json:"uris,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetRecordsRequest) Reset() {
-	*x = GetRecordsRequest{}
-	mi := &file_atlas_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetRecordsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetRecordsRequest) ProtoMessage() {}
-
-func (x *GetRecordsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetRecordsRequest.ProtoReflect.Descriptor instead.
-func (*GetRecordsRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *GetRecordsRequest) GetUris() []string {
-	if x != nil {
-		return x.Uris
-	}
-	return nil
-}
-
-type GetRecordsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Records       []*Record              `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetRecordsResponse) Reset() {
-	*x = GetRecordsResponse{}
-	mi := &file_atlas_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetRecordsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetRecordsResponse) ProtoMessage() {}
-
-func (x *GetRecordsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetRecordsResponse.ProtoReflect.Descriptor instead.
-func (*GetRecordsResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *GetRecordsResponse) GetRecords() []*Record {
-	if x != nil {
-		return x.Records
-	}
-	return nil
-}
-
-type GetActorsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Dids          []string               `protobuf:"bytes,1,rep,name=dids,proto3" json:"dids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetActorsRequest) Reset() {
-	*x = GetActorsRequest{}
-	mi := &file_atlas_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetActorsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetActorsRequest) ProtoMessage() {}
-
-func (x *GetActorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetActorsRequest.ProtoReflect.Descriptor instead.
-func (*GetActorsRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *GetActorsRequest) GetDids() []string {
-	if x != nil {
-		return x.Dids
-	}
-	return nil
-}
-
-type GetActorsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Actors        []*Actor               `protobuf:"bytes,1,rep,name=actors,proto3" json:"actors,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetActorsResponse) Reset() {
-	*x = GetActorsResponse{}
-	mi := &file_atlas_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetActorsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetActorsResponse) ProtoMessage() {}
-
-func (x *GetActorsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetActorsResponse.ProtoReflect.Descriptor instead.
-func (*GetActorsResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *GetActorsResponse) GetActors() []*Actor {
-	if x != nil {
-		return x.Actors
-	}
-	return nil
-}
-
-type QueryRequest struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Filter to specific collections. Empty means all.
-	Collections []string `protobuf:"bytes,1,rep,name=collections,proto3" json:"collections,omitempty"`
-	// Filter to specific DIDs. Empty means all.
-	Dids []string `protobuf:"bytes,2,rep,name=dids,proto3" json:"dids,omitempty"`
-	// Filter expression for WHERE clause.
-	Filter *Filter `protobuf:"bytes,3,opt,name=filter,proto3" json:"filter,omitempty"`
-	// Ordering. Default is indexed_at DESC.
-	Sorts []*Sort `protobuf:"bytes,4,rep,name=sorts,proto3" json:"sorts,omitempty"`
-	// Max records to return. Default 100, max 1000.
-	Limit int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
-	// Cursor for pagination (opaque string from previous response).
-	Cursor string `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	// What additional data to resolve and include.
-	Resolve       *ResolveOptions `protobuf:"bytes,7,opt,name=resolve,proto3" json:"resolve,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryRequest) Reset() {
-	*x = QueryRequest{}
-	mi := &file_atlas_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryRequest) ProtoMessage() {}
-
-func (x *QueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryRequest.ProtoReflect.Descriptor instead.
-func (*QueryRequest) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *QueryRequest) GetCollections() []string {
-	if x != nil {
-		return x.Collections
-	}
-	return nil
-}
-
-func (x *QueryRequest) GetDids() []string {
-	if x != nil {
-		return x.Dids
-	}
-	return nil
-}
-
-func (x *QueryRequest) GetFilter() *Filter {
-	if x != nil {
-		return x.Filter
-	}
-	return nil
-}
-
-func (x *QueryRequest) GetSorts() []*Sort {
-	if x != nil {
-		return x.Sorts
-	}
-	return nil
-}
-
-func (x *QueryRequest) GetLimit() int32 {
-	if x != nil {
-		return x.Limit
-	}
-	return 0
-}
-
-func (x *QueryRequest) GetCursor() string {
-	if x != nil {
-		return x.Cursor
-	}
-	return ""
-}
-
-func (x *QueryRequest) GetResolve() *ResolveOptions {
-	if x != nil {
-		return x.Resolve
-	}
-	return nil
-}
-
-type ResolveOptions struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Include author Identity for each record.
-	Authors bool `protobuf:"varint,1,opt,name=authors,proto3" json:"authors,omitempty"`
-	// Resolve strongRef fields and include referenced records.
-	// Scans record values for {uri, cid} objects and fetches them.
-	Refs bool `protobuf:"varint,2,opt,name=refs,proto3" json:"refs,omitempty"`
-	// Max depth for recursive ref resolution. Default 1.
-	RefsDepth int32 `protobuf:"varint,3,opt,name=refs_depth,json=refsDepth,proto3" json:"refs_depth,omitempty"`
-	// Only resolve refs at these JSON paths (e.g., "reply.parent", "subject").
-	// Empty means auto-detect all strongRefs.
-	RefPaths []string `protobuf:"bytes,4,rep,name=ref_paths,json=refPaths,proto3" json:"ref_paths,omitempty"`
-	// Also resolve authors of resolved refs.
-	RefsAuthors   bool `protobuf:"varint,5,opt,name=refs_authors,json=refsAuthors,proto3" json:"refs_authors,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ResolveOptions) Reset() {
-	*x = ResolveOptions{}
-	mi := &file_atlas_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ResolveOptions) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ResolveOptions) ProtoMessage() {}
-
-func (x *ResolveOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ResolveOptions.ProtoReflect.Descriptor instead.
-func (*ResolveOptions) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *ResolveOptions) GetAuthors() bool {
-	if x != nil {
-		return x.Authors
-	}
-	return false
-}
-
-func (x *ResolveOptions) GetRefs() bool {
-	if x != nil {
-		return x.Refs
-	}
-	return false
-}
-
-func (x *ResolveOptions) GetRefsDepth() int32 {
-	if x != nil {
-		return x.RefsDepth
-	}
-	return 0
-}
-
-func (x *ResolveOptions) GetRefPaths() []string {
-	if x != nil {
-		return x.RefPaths
-	}
-	return nil
-}
-
-func (x *ResolveOptions) GetRefsAuthors() bool {
-	if x != nil {
-		return x.RefsAuthors
-	}
-	return false
-}
-
-type QueryResponse struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Records []*Record              `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
-	Cursor  string                 `protobuf:"bytes,2,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	// Resolved references, deduplicated by URI.
-	Refs map[string]*Record `protobuf:"bytes,3,rep,name=refs,proto3" json:"refs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Actors, deduplicated by DID.
-	Actors        map[string]*Actor `protobuf:"bytes,4,rep,name=actors,proto3" json:"actors,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryResponse) Reset() {
-	*x = QueryResponse{}
-	mi := &file_atlas_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryResponse) ProtoMessage() {}
-
-func (x *QueryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryResponse.ProtoReflect.Descriptor instead.
-func (*QueryResponse) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *QueryResponse) GetRecords() []*Record {
-	if x != nil {
-		return x.Records
-	}
-	return nil
-}
-
-func (x *QueryResponse) GetCursor() string {
-	if x != nil {
-		return x.Cursor
-	}
-	return ""
-}
-
-func (x *QueryResponse) GetRefs() map[string]*Record {
-	if x != nil {
-		return x.Refs
-	}
-	return nil
-}
-
-func (x *QueryResponse) GetActors() map[string]*Actor {
-	if x != nil {
-		return x.Actors
-	}
-	return nil
-}
-
-type Filter struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Filter:
-	//
-	//	*Filter_Condition
-	//	*Filter_And
-	//	*Filter_Or
-	//	*Filter_Not
-	Filter        isFilter_Filter `protobuf_oneof:"filter"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Filter) Reset() {
-	*x = Filter{}
-	mi := &file_atlas_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Filter) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Filter) ProtoMessage() {}
-
-func (x *Filter) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Filter.ProtoReflect.Descriptor instead.
-func (*Filter) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *Filter) GetFilter() isFilter_Filter {
-	if x != nil {
-		return x.Filter
-	}
-	return nil
-}
-
-func (x *Filter) GetCondition() *Condition {
-	if x != nil {
-		if x, ok := x.Filter.(*Filter_Condition); ok {
-			return x.Condition
-		}
-	}
-	return nil
-}
-
-func (x *Filter) GetAnd() *AndFilter {
-	if x != nil {
-		if x, ok := x.Filter.(*Filter_And); ok {
-			return x.And
-		}
-	}
-	return nil
-}
-
-func (x *Filter) GetOr() *OrFilter {
-	if x != nil {
-		if x, ok := x.Filter.(*Filter_Or); ok {
-			return x.Or
-		}
-	}
-	return nil
-}
-
-func (x *Filter) GetNot() *NotFilter {
-	if x != nil {
-		if x, ok := x.Filter.(*Filter_Not); ok {
-			return x.Not
-		}
-	}
-	return nil
-}
-
-type isFilter_Filter interface {
-	isFilter_Filter()
-}
-
-type Filter_Condition struct {
-	Condition *Condition `protobuf:"bytes,1,opt,name=condition,proto3,oneof"`
-}
-
-type Filter_And struct {
-	And *AndFilter `protobuf:"bytes,2,opt,name=and,proto3,oneof"`
-}
-
-type Filter_Or struct {
-	Or *OrFilter `protobuf:"bytes,3,opt,name=or,proto3,oneof"`
-}
-
-type Filter_Not struct {
-	Not *NotFilter `protobuf:"bytes,4,opt,name=not,proto3,oneof"`
-}
-
-func (*Filter_Condition) isFilter_Filter() {}
-
-func (*Filter_And) isFilter_Filter() {}
-
-func (*Filter_Or) isFilter_Filter() {}
-
-func (*Filter_Not) isFilter_Filter() {}
-
-type Condition struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Field path using dot notation for nested JSON.
-	// Special: "did", "collection", "rkey", "cid", "indexed_at", "created_at"
-	// Value fields: "value.text", "value.reply.parent.uri", etc.
-	Field         string `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
-	Op            Op     `protobuf:"varint,2,opt,name=op,proto3,enum=types.Op" json:"op,omitempty"`
-	Value         *Value `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Condition) Reset() {
-	*x = Condition{}
-	mi := &file_atlas_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Condition) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Condition) ProtoMessage() {}
-
-func (x *Condition) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Condition.ProtoReflect.Descriptor instead.
-func (*Condition) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *Condition) GetField() string {
-	if x != nil {
-		return x.Field
-	}
-	return ""
-}
-
-func (x *Condition) GetOp() Op {
-	if x != nil {
-		return x.Op
-	}
-	return Op_OP_UNSPECIFIED
-}
-
-func (x *Condition) GetValue() *Value {
-	if x != nil {
-		return x.Value
-	}
-	return nil
-}
-
-type Value struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Value:
-	//
-	//	*Value_StringValue
-	//	*Value_IntValue
-	//	*Value_DoubleValue
-	//	*Value_BoolValue
-	//	*Value_ListValue
-	Value         isValue_Value `protobuf_oneof:"value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Value) Reset() {
-	*x = Value{}
-	mi := &file_atlas_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Value) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Value) ProtoMessage() {}
-
-func (x *Value) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Value.ProtoReflect.Descriptor instead.
-func (*Value) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *Value) GetValue() isValue_Value {
-	if x != nil {
-		return x.Value
-	}
-	return nil
-}
-
-func (x *Value) GetStringValue() string {
-	if x != nil {
-		if x, ok := x.Value.(*Value_StringValue); ok {
-			return x.StringValue
-		}
-	}
-	return ""
-}
-
-func (x *Value) GetIntValue() int64 {
-	if x != nil {
-		if x, ok := x.Value.(*Value_IntValue); ok {
-			return x.IntValue
-		}
-	}
-	return 0
-}
-
-func (x *Value) GetDoubleValue() float64 {
-	if x != nil {
-		if x, ok := x.Value.(*Value_DoubleValue); ok {
-			return x.DoubleValue
-		}
-	}
-	return 0
-}
-
-func (x *Value) GetBoolValue() bool {
-	if x != nil {
-		if x, ok := x.Value.(*Value_BoolValue); ok {
-			return x.BoolValue
-		}
-	}
-	return false
-}
-
-func (x *Value) GetListValue() *ListValue {
-	if x != nil {
-		if x, ok := x.Value.(*Value_ListValue); ok {
-			return x.ListValue
-		}
-	}
-	return nil
-}
-
-type isValue_Value interface {
-	isValue_Value()
-}
-
-type Value_StringValue struct {
-	StringValue string `protobuf:"bytes,1,opt,name=string_value,json=stringValue,proto3,oneof"`
-}
-
-type Value_IntValue struct {
-	IntValue int64 `protobuf:"varint,2,opt,name=int_value,json=intValue,proto3,oneof"`
-}
-
-type Value_DoubleValue struct {
-	DoubleValue float64 `protobuf:"fixed64,3,opt,name=double_value,json=doubleValue,proto3,oneof"`
-}
-
-type Value_BoolValue struct {
-	BoolValue bool `protobuf:"varint,4,opt,name=bool_value,json=boolValue,proto3,oneof"`
-}
-
-type Value_ListValue struct {
-	ListValue *ListValue `protobuf:"bytes,5,opt,name=list_value,json=listValue,proto3,oneof"`
-}
-
-func (*Value_StringValue) isValue_Value() {}
-
-func (*Value_IntValue) isValue_Value() {}
-
-func (*Value_DoubleValue) isValue_Value() {}
-
-func (*Value_BoolValue) isValue_Value() {}
-
-func (*Value_ListValue) isValue_Value() {}
-
-type ListValue struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        []*Value               `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListValue) Reset() {
-	*x = ListValue{}
-	mi := &file_atlas_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListValue) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListValue) ProtoMessage() {}
-
-func (x *ListValue) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListValue.ProtoReflect.Descriptor instead.
-func (*ListValue) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *ListValue) GetValues() []*Value {
-	if x != nil {
-		return x.Values
-	}
-	return nil
-}
-
-type AndFilter struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filters       []*Filter              `protobuf:"bytes,1,rep,name=filters,proto3" json:"filters,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AndFilter) Reset() {
-	*x = AndFilter{}
-	mi := &file_atlas_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AndFilter) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AndFilter) ProtoMessage() {}
-
-func (x *AndFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AndFilter.ProtoReflect.Descriptor instead.
-func (*AndFilter) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *AndFilter) GetFilters() []*Filter {
-	if x != nil {
-		return x.Filters
-	}
-	return nil
-}
-
-type OrFilter struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filters       []*Filter              `protobuf:"bytes,1,rep,name=filters,proto3" json:"filters,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *OrFilter) Reset() {
-	*x = OrFilter{}
-	mi := &file_atlas_proto_msgTypes[14]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *OrFilter) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*OrFilter) ProtoMessage() {}
-
-func (x *OrFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[14]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use OrFilter.ProtoReflect.Descriptor instead.
-func (*OrFilter) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{14}
-}
-
-func (x *OrFilter) GetFilters() []*Filter {
-	if x != nil {
-		return x.Filters
-	}
-	return nil
-}
-
-type NotFilter struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Filter        *Filter                `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NotFilter) Reset() {
-	*x = NotFilter{}
-	mi := &file_atlas_proto_msgTypes[15]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NotFilter) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NotFilter) ProtoMessage() {}
-
-func (x *NotFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[15]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NotFilter.ProtoReflect.Descriptor instead.
-func (*NotFilter) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{15}
-}
-
-func (x *NotFilter) GetFilter() *Filter {
-	if x != nil {
-		return x.Filter
-	}
-	return nil
-}
-
-type Sort struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Field         string                 `protobuf:"bytes,1,opt,name=field,proto3" json:"field,omitempty"`
-	Dir           SortDir                `protobuf:"varint,2,opt,name=dir,proto3,enum=types.SortDir" json:"dir,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Sort) Reset() {
-	*x = Sort{}
-	mi := &file_atlas_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Sort) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Sort) ProtoMessage() {}
-
-func (x *Sort) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Sort.ProtoReflect.Descriptor instead.
-func (*Sort) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *Sort) GetField() string {
-	if x != nil {
-		return x.Field
-	}
-	return ""
-}
-
-func (x *Sort) GetDir() SortDir {
-	if x != nil {
-		return x.Dir
-	}
-	return SortDir_SORT_DIR_UNSPECIFIED
-}
-
-type Record struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Uri           string                 `protobuf:"bytes,1,opt,name=uri,proto3" json:"uri,omitempty"`
-	Cid           string                 `protobuf:"bytes,2,opt,name=cid,proto3" json:"cid,omitempty"`
-	Did           string                 `protobuf:"bytes,3,opt,name=did,proto3" json:"did,omitempty"`
-	Collection    string                 `protobuf:"bytes,4,opt,name=collection,proto3" json:"collection,omitempty"`
-	Rkey          string                 `protobuf:"bytes,5,opt,name=rkey,proto3" json:"rkey,omitempty"`
-	Value         []byte                 `protobuf:"bytes,6,opt,name=value,proto3" json:"value,omitempty"`
-	IndexedAt     int64                  `protobuf:"varint,7,opt,name=indexed_at,json=indexedAt,proto3" json:"indexed_at,omitempty"`
-	CreatedAt     *int64                 `protobuf:"varint,8,opt,name=created_at,json=createdAt,proto3,oneof" json:"created_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Record) Reset() {
-	*x = Record{}
-	mi := &file_atlas_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Record) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Record) ProtoMessage() {}
-
-func (x *Record) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Record.ProtoReflect.Descriptor instead.
-func (*Record) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *Record) GetUri() string {
-	if x != nil {
-		return x.Uri
-	}
-	return ""
-}
-
-func (x *Record) GetCid() string {
-	if x != nil {
-		return x.Cid
-	}
-	return ""
-}
-
-func (x *Record) GetDid() string {
-	if x != nil {
-		return x.Did
-	}
-	return ""
-}
-
-func (x *Record) GetCollection() string {
-	if x != nil {
-		return x.Collection
-	}
-	return ""
-}
-
-func (x *Record) GetRkey() string {
-	if x != nil {
-		return x.Rkey
-	}
-	return ""
-}
-
-func (x *Record) GetValue() []byte {
-	if x != nil {
-		return x.Value
-	}
-	return nil
-}
-
-func (x *Record) GetIndexedAt() int64 {
-	if x != nil {
-		return x.IndexedAt
-	}
-	return 0
-}
-
-func (x *Record) GetCreatedAt() int64 {
-	if x != nil && x.CreatedAt != nil {
-		return *x.CreatedAt
-	}
-	return 0
-}
-
 type Actor struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Did           string                 `protobuf:"bytes,1,opt,name=did,proto3" json:"did,omitempty"`
-	Handle        string                 `protobuf:"bytes,2,opt,name=handle,proto3" json:"handle,omitempty"`
-	IsActive      bool                   `protobuf:"varint,3,opt,name=is_active,json=isActive,proto3" json:"is_active,omitempty"`
-	Status        string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	Did                   string                 `protobuf:"bytes,1,opt,name=did,proto3" json:"did,omitempty"`
+	CreatedAt             *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Email                 string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
+	EmailVerificationCode string                 `protobuf:"bytes,4,opt,name=email_verification_code,json=emailVerificationCode,proto3" json:"email_verification_code,omitempty"`
+	EmailConfirmed        bool                   `protobuf:"varint,5,opt,name=email_confirmed,json=emailConfirmed,proto3" json:"email_confirmed,omitempty"`
+	PasswordHash          []byte                 `protobuf:"bytes,6,opt,name=password_hash,json=passwordHash,proto3" json:"password_hash,omitempty"`
+	SigningKey            []byte                 `protobuf:"bytes,7,opt,name=signing_key,json=signingKey,proto3" json:"signing_key,omitempty"`
+	Handle                string                 `protobuf:"bytes,8,opt,name=handle,proto3" json:"handle,omitempty"`
+	Active                bool                   `protobuf:"varint,9,opt,name=active,proto3" json:"active,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *Actor) Reset() {
 	*x = Actor{}
-	mi := &file_atlas_proto_msgTypes[18]
+	mi := &file_atlas_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +51,7 @@ func (x *Actor) String() string {
 func (*Actor) ProtoMessage() {}
 
 func (x *Actor) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[18]
+	mi := &file_atlas_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +64,7 @@ func (x *Actor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Actor.ProtoReflect.Descriptor instead.
 func (*Actor) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{18}
+	return file_atlas_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Actor) GetDid() string {
@@ -1325,6 +74,48 @@ func (x *Actor) GetDid() string {
 	return ""
 }
 
+func (x *Actor) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Actor) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *Actor) GetEmailVerificationCode() string {
+	if x != nil {
+		return x.EmailVerificationCode
+	}
+	return ""
+}
+
+func (x *Actor) GetEmailConfirmed() bool {
+	if x != nil {
+		return x.EmailConfirmed
+	}
+	return false
+}
+
+func (x *Actor) GetPasswordHash() []byte {
+	if x != nil {
+		return x.PasswordHash
+	}
+	return nil
+}
+
+func (x *Actor) GetSigningKey() []byte {
+	if x != nil {
+		return x.SigningKey
+	}
+	return nil
+}
+
 func (x *Actor) GetHandle() string {
 	if x != nil {
 		return x.Handle
@@ -1332,133 +123,30 @@ func (x *Actor) GetHandle() string {
 	return ""
 }
 
-func (x *Actor) GetIsActive() bool {
+func (x *Actor) GetActive() bool {
 	if x != nil {
-		return x.IsActive
+		return x.Active
 	}
 	return false
-}
-
-func (x *Actor) GetStatus() string {
-	if x != nil {
-		return x.Status
-	}
-	return ""
 }
 
 var File_atlas_proto protoreflect.FileDescriptor
 
 const file_atlas_proto_rawDesc = "" +
 	"\n" +
-	"\vatlas.proto\x12\x05types\"\r\n" +
-	"\vPingRequest\"\x0e\n" +
-	"\fPingResponse\"'\n" +
-	"\x11GetRecordsRequest\x12\x12\n" +
-	"\x04uris\x18\x01 \x03(\tR\x04uris\"=\n" +
-	"\x12GetRecordsResponse\x12'\n" +
-	"\arecords\x18\x01 \x03(\v2\r.types.RecordR\arecords\"&\n" +
-	"\x10GetActorsRequest\x12\x12\n" +
-	"\x04dids\x18\x01 \x03(\tR\x04dids\"9\n" +
-	"\x11GetActorsResponse\x12$\n" +
-	"\x06actors\x18\x01 \x03(\v2\f.types.ActorR\x06actors\"\xed\x01\n" +
-	"\fQueryRequest\x12 \n" +
-	"\vcollections\x18\x01 \x03(\tR\vcollections\x12\x12\n" +
-	"\x04dids\x18\x02 \x03(\tR\x04dids\x12%\n" +
-	"\x06filter\x18\x03 \x01(\v2\r.types.FilterR\x06filter\x12!\n" +
-	"\x05sorts\x18\x04 \x03(\v2\v.types.SortR\x05sorts\x12\x14\n" +
-	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06cursor\x18\x06 \x01(\tR\x06cursor\x12/\n" +
-	"\aresolve\x18\a \x01(\v2\x15.types.ResolveOptionsR\aresolve\"\x9d\x01\n" +
-	"\x0eResolveOptions\x12\x18\n" +
-	"\aauthors\x18\x01 \x01(\bR\aauthors\x12\x12\n" +
-	"\x04refs\x18\x02 \x01(\bR\x04refs\x12\x1d\n" +
-	"\n" +
-	"refs_depth\x18\x03 \x01(\x05R\trefsDepth\x12\x1b\n" +
-	"\tref_paths\x18\x04 \x03(\tR\brefPaths\x12!\n" +
-	"\frefs_authors\x18\x05 \x01(\bR\vrefsAuthors\"\xcf\x02\n" +
-	"\rQueryResponse\x12'\n" +
-	"\arecords\x18\x01 \x03(\v2\r.types.RecordR\arecords\x12\x16\n" +
-	"\x06cursor\x18\x02 \x01(\tR\x06cursor\x122\n" +
-	"\x04refs\x18\x03 \x03(\v2\x1e.types.QueryResponse.RefsEntryR\x04refs\x128\n" +
-	"\x06actors\x18\x04 \x03(\v2 .types.QueryResponse.ActorsEntryR\x06actors\x1aF\n" +
-	"\tRefsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12#\n" +
-	"\x05value\x18\x02 \x01(\v2\r.types.RecordR\x05value:\x028\x01\x1aG\n" +
-	"\vActorsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\"\n" +
-	"\x05value\x18\x02 \x01(\v2\f.types.ActorR\x05value:\x028\x01\"\xb3\x01\n" +
-	"\x06Filter\x120\n" +
-	"\tcondition\x18\x01 \x01(\v2\x10.types.ConditionH\x00R\tcondition\x12$\n" +
-	"\x03and\x18\x02 \x01(\v2\x10.types.AndFilterH\x00R\x03and\x12!\n" +
-	"\x02or\x18\x03 \x01(\v2\x0f.types.OrFilterH\x00R\x02or\x12$\n" +
-	"\x03not\x18\x04 \x01(\v2\x10.types.NotFilterH\x00R\x03notB\b\n" +
-	"\x06filter\"`\n" +
-	"\tCondition\x12\x14\n" +
-	"\x05field\x18\x01 \x01(\tR\x05field\x12\x19\n" +
-	"\x02op\x18\x02 \x01(\x0e2\t.types.OpR\x02op\x12\"\n" +
-	"\x05value\x18\x03 \x01(\v2\f.types.ValueR\x05value\"\xcd\x01\n" +
-	"\x05Value\x12#\n" +
-	"\fstring_value\x18\x01 \x01(\tH\x00R\vstringValue\x12\x1d\n" +
-	"\tint_value\x18\x02 \x01(\x03H\x00R\bintValue\x12#\n" +
-	"\fdouble_value\x18\x03 \x01(\x01H\x00R\vdoubleValue\x12\x1f\n" +
-	"\n" +
-	"bool_value\x18\x04 \x01(\bH\x00R\tboolValue\x121\n" +
-	"\n" +
-	"list_value\x18\x05 \x01(\v2\x10.types.ListValueH\x00R\tlistValueB\a\n" +
-	"\x05value\"1\n" +
-	"\tListValue\x12$\n" +
-	"\x06values\x18\x01 \x03(\v2\f.types.ValueR\x06values\"4\n" +
-	"\tAndFilter\x12'\n" +
-	"\afilters\x18\x01 \x03(\v2\r.types.FilterR\afilters\"3\n" +
-	"\bOrFilter\x12'\n" +
-	"\afilters\x18\x01 \x03(\v2\r.types.FilterR\afilters\"2\n" +
-	"\tNotFilter\x12%\n" +
-	"\x06filter\x18\x01 \x01(\v2\r.types.FilterR\x06filter\">\n" +
-	"\x04Sort\x12\x14\n" +
-	"\x05field\x18\x01 \x01(\tR\x05field\x12 \n" +
-	"\x03dir\x18\x02 \x01(\x0e2\x0e.types.SortDirR\x03dir\"\xda\x01\n" +
-	"\x06Record\x12\x10\n" +
-	"\x03uri\x18\x01 \x01(\tR\x03uri\x12\x10\n" +
-	"\x03cid\x18\x02 \x01(\tR\x03cid\x12\x10\n" +
-	"\x03did\x18\x03 \x01(\tR\x03did\x12\x1e\n" +
-	"\n" +
-	"collection\x18\x04 \x01(\tR\n" +
-	"collection\x12\x12\n" +
-	"\x04rkey\x18\x05 \x01(\tR\x04rkey\x12\x14\n" +
-	"\x05value\x18\x06 \x01(\fR\x05value\x12\x1d\n" +
-	"\n" +
-	"indexed_at\x18\a \x01(\x03R\tindexedAt\x12\"\n" +
-	"\n" +
-	"created_at\x18\b \x01(\x03H\x00R\tcreatedAt\x88\x01\x01B\r\n" +
-	"\v_created_at\"f\n" +
+	"\vatlas.proto\x12\x05types\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc1\x02\n" +
 	"\x05Actor\x12\x10\n" +
-	"\x03did\x18\x01 \x01(\tR\x03did\x12\x16\n" +
-	"\x06handle\x18\x02 \x01(\tR\x06handle\x12\x1b\n" +
-	"\tis_active\x18\x03 \x01(\bR\bisActive\x12\x16\n" +
-	"\x06status\x18\x04 \x01(\tR\x06status*\x99\x01\n" +
-	"\x02Op\x12\x12\n" +
-	"\x0eOP_UNSPECIFIED\x10\x00\x12\t\n" +
-	"\x05OP_EQ\x10\x01\x12\t\n" +
-	"\x05OP_NE\x10\x02\x12\t\n" +
-	"\x05OP_LT\x10\x03\x12\t\n" +
-	"\x05OP_LE\x10\x04\x12\t\n" +
-	"\x05OP_GT\x10\x05\x12\t\n" +
-	"\x05OP_GE\x10\x06\x12\x0f\n" +
-	"\vOP_CONTAINS\x10\a\x12\x12\n" +
-	"\x0eOP_STARTS_WITH\x10\b\x12\t\n" +
-	"\x05OP_IN\x10\t\x12\r\n" +
-	"\tOP_EXISTS\x10\n" +
-	"*H\n" +
-	"\aSortDir\x12\x18\n" +
-	"\x14SORT_DIR_UNSPECIFIED\x10\x00\x12\x10\n" +
-	"\fSORT_DIR_ASC\x10\x01\x12\x11\n" +
-	"\rSORT_DIR_DESC\x10\x022\xf1\x01\n" +
-	"\aService\x12/\n" +
-	"\x04Ping\x12\x12.types.PingRequest\x1a\x13.types.PingResponse\x12A\n" +
+	"\x03did\x18\x01 \x01(\tR\x03did\x129\n" +
 	"\n" +
-	"GetRecords\x12\x18.types.GetRecordsRequest\x1a\x19.types.GetRecordsResponse\x12>\n" +
-	"\tGetActors\x12\x17.types.GetActorsRequest\x1a\x18.types.GetActorsResponse\x122\n" +
-	"\x05Query\x12\x13.types.QueryRequest\x1a\x14.types.QueryResponseB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
+	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x14\n" +
+	"\x05email\x18\x03 \x01(\tR\x05email\x126\n" +
+	"\x17email_verification_code\x18\x04 \x01(\tR\x15emailVerificationCode\x12'\n" +
+	"\x0femail_confirmed\x18\x05 \x01(\bR\x0eemailConfirmed\x12#\n" +
+	"\rpassword_hash\x18\x06 \x01(\fR\fpasswordHash\x12\x1f\n" +
+	"\vsigning_key\x18\a \x01(\fR\n" +
+	"signingKey\x12\x16\n" +
+	"\x06handle\x18\b \x01(\tR\x06handle\x12\x16\n" +
+	"\x06active\x18\t \x01(\bR\x06activeB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
 
 var (
 	file_atlas_proto_rawDescOnce sync.Once
@@ -1472,69 +160,18 @@ func file_atlas_proto_rawDescGZIP() []byte {
 	return file_atlas_proto_rawDescData
 }
 
-var file_atlas_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_atlas_proto_goTypes = []any{
-	(Op)(0),                    // 0: types.Op
-	(SortDir)(0),               // 1: types.SortDir
-	(*PingRequest)(nil),        // 2: types.PingRequest
-	(*PingResponse)(nil),       // 3: types.PingResponse
-	(*GetRecordsRequest)(nil),  // 4: types.GetRecordsRequest
-	(*GetRecordsResponse)(nil), // 5: types.GetRecordsResponse
-	(*GetActorsRequest)(nil),   // 6: types.GetActorsRequest
-	(*GetActorsResponse)(nil),  // 7: types.GetActorsResponse
-	(*QueryRequest)(nil),       // 8: types.QueryRequest
-	(*ResolveOptions)(nil),     // 9: types.ResolveOptions
-	(*QueryResponse)(nil),      // 10: types.QueryResponse
-	(*Filter)(nil),             // 11: types.Filter
-	(*Condition)(nil),          // 12: types.Condition
-	(*Value)(nil),              // 13: types.Value
-	(*ListValue)(nil),          // 14: types.ListValue
-	(*AndFilter)(nil),          // 15: types.AndFilter
-	(*OrFilter)(nil),           // 16: types.OrFilter
-	(*NotFilter)(nil),          // 17: types.NotFilter
-	(*Sort)(nil),               // 18: types.Sort
-	(*Record)(nil),             // 19: types.Record
-	(*Actor)(nil),              // 20: types.Actor
-	nil,                        // 21: types.QueryResponse.RefsEntry
-	nil,                        // 22: types.QueryResponse.ActorsEntry
+	(*Actor)(nil),                 // 0: types.Actor
+	(*timestamppb.Timestamp)(nil), // 1: google.protobuf.Timestamp
 }
 var file_atlas_proto_depIdxs = []int32{
-	19, // 0: types.GetRecordsResponse.records:type_name -> types.Record
-	20, // 1: types.GetActorsResponse.actors:type_name -> types.Actor
-	11, // 2: types.QueryRequest.filter:type_name -> types.Filter
-	18, // 3: types.QueryRequest.sorts:type_name -> types.Sort
-	9,  // 4: types.QueryRequest.resolve:type_name -> types.ResolveOptions
-	19, // 5: types.QueryResponse.records:type_name -> types.Record
-	21, // 6: types.QueryResponse.refs:type_name -> types.QueryResponse.RefsEntry
-	22, // 7: types.QueryResponse.actors:type_name -> types.QueryResponse.ActorsEntry
-	12, // 8: types.Filter.condition:type_name -> types.Condition
-	15, // 9: types.Filter.and:type_name -> types.AndFilter
-	16, // 10: types.Filter.or:type_name -> types.OrFilter
-	17, // 11: types.Filter.not:type_name -> types.NotFilter
-	0,  // 12: types.Condition.op:type_name -> types.Op
-	13, // 13: types.Condition.value:type_name -> types.Value
-	14, // 14: types.Value.list_value:type_name -> types.ListValue
-	13, // 15: types.ListValue.values:type_name -> types.Value
-	11, // 16: types.AndFilter.filters:type_name -> types.Filter
-	11, // 17: types.OrFilter.filters:type_name -> types.Filter
-	11, // 18: types.NotFilter.filter:type_name -> types.Filter
-	1,  // 19: types.Sort.dir:type_name -> types.SortDir
-	19, // 20: types.QueryResponse.RefsEntry.value:type_name -> types.Record
-	20, // 21: types.QueryResponse.ActorsEntry.value:type_name -> types.Actor
-	2,  // 22: types.Service.Ping:input_type -> types.PingRequest
-	4,  // 23: types.Service.GetRecords:input_type -> types.GetRecordsRequest
-	6,  // 24: types.Service.GetActors:input_type -> types.GetActorsRequest
-	8,  // 25: types.Service.Query:input_type -> types.QueryRequest
-	3,  // 26: types.Service.Ping:output_type -> types.PingResponse
-	5,  // 27: types.Service.GetRecords:output_type -> types.GetRecordsResponse
-	7,  // 28: types.Service.GetActors:output_type -> types.GetActorsResponse
-	10, // 29: types.Service.Query:output_type -> types.QueryResponse
-	26, // [26:30] is the sub-list for method output_type
-	22, // [22:26] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	1, // 0: types.Actor.created_at:type_name -> google.protobuf.Timestamp
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_atlas_proto_init() }
@@ -1542,33 +179,18 @@ func file_atlas_proto_init() {
 	if File_atlas_proto != nil {
 		return
 	}
-	file_atlas_proto_msgTypes[9].OneofWrappers = []any{
-		(*Filter_Condition)(nil),
-		(*Filter_And)(nil),
-		(*Filter_Or)(nil),
-		(*Filter_Not)(nil),
-	}
-	file_atlas_proto_msgTypes[11].OneofWrappers = []any{
-		(*Value_StringValue)(nil),
-		(*Value_IntValue)(nil),
-		(*Value_DoubleValue)(nil),
-		(*Value_BoolValue)(nil),
-		(*Value_ListValue)(nil),
-	}
-	file_atlas_proto_msgTypes[17].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atlas_proto_rawDesc), len(file_atlas_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   21,
+			NumEnums:      0,
+			NumMessages:   1,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   0,
 		},
 		GoTypes:           file_atlas_proto_goTypes,
 		DependencyIndexes: file_atlas_proto_depIdxs,
-		EnumInfos:         file_atlas_proto_enumTypes,
 		MessageInfos:      file_atlas_proto_msgTypes,
 	}.Build()
 	File_atlas_proto = out.File

@@ -34,6 +34,11 @@ var (
 				Usage: "Primary HTTP server write timeout",
 				Value: time.Minute,
 			},
+			&cli.StringFlag{
+				Name:  "plc",
+				Usage: "URL of the PLC server to use",
+				Value: "https://plc.directory",
+			},
 		),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return pds.Run(ctx, &pds.Args{
@@ -41,6 +46,7 @@ var (
 				MetricsAddr:  c.String("metrics-addr"),
 				ReadTimeout:  c.Duration("read-timeout"),
 				WriteTimeout: c.Duration("write-timeout"),
+				PLCAddr:      c.String("plc"),
 				FDB: foundation.Config{
 					ClusterFile: c.String("fdb-cluster-file"),
 					APIVersion:  c.Int("fdb-api-version"),

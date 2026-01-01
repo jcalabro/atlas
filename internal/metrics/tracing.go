@@ -6,13 +6,12 @@ import (
 
 	"github.com/jcalabro/atlas/internal/env"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -44,13 +43,12 @@ func InitTracing(ctx context.Context, service string) error {
 	return nil
 }
 
-func SpanEnd(span trace.Span, err error) {
-	if err == nil {
-		span.SetStatus(codes.Ok, "ok")
-	} else {
-		span.SetStatus(codes.Error, err.Error())
-		span.RecordError(err)
+// Safely returns an attribute.String pair from a string that is potentially nil
+func NilString(key string, item *string) attribute.KeyValue {
+	val := "(nil)"
+	if item != nil {
+		val = *item
 	}
 
-	span.End()
+	return attribute.String(key, val)
 }
