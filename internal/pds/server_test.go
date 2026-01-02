@@ -45,6 +45,7 @@ func testServer(t *testing.T) *server {
 		cfg: config{
 			signingKey:     signingKey,
 			serviceDID:     "did:web:dev.atlaspds.dev",
+			hostname:       "dev.atlaspds.dev",
 			userDomains:    []string{".dev.atlaspds.dev"},
 			contactEmail:   "webmaster@dev.atlaspds.dev",
 			privacyPolicy:  "https://dev.atlaspds.dev/privacy",

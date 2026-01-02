@@ -17,7 +17,7 @@ func TestHandlePing(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
-	require.Equal(t, "text/plain", w.Header().Get("Content-Type"))
+	require.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
 	require.Equal(t, "OK", w.Body.String())
 }
 

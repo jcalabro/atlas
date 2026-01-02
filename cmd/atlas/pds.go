@@ -13,6 +13,7 @@ import (
 var (
 	defaultSigningKeyPath = "./testdata/jwt-signing-key.pem"
 	defaultServiceDID     = "did:web:dev.atlaspds.net"
+	defaultHostname       = "dev.atlaspds.net"
 	defaultUserDomains    = []string{".dev.atlaspds.net"}
 )
 
@@ -20,6 +21,7 @@ func init() {
 	if env.IsProd() {
 		defaultSigningKeyPath = ""
 		defaultServiceDID = ""
+		defaultHostname = ""
 		defaultUserDomains = []string{}
 	}
 }
@@ -64,6 +66,11 @@ func pdsCmd() *cli.Command {
 				Usage: "DID of this PDS service (used as 'aud' claim in JWTs)",
 				Value: defaultServiceDID,
 			},
+			&cli.StringFlag{
+				Name:  "hostname",
+				Usage: "Public hostname of this PDS server (used in well-known endpoints)",
+				Value: defaultHostname,
+			},
 			&cli.StringSliceFlag{
 				Name:  "user-domains",
 				Usage: "List of domains on which users are allowed to signup",
@@ -91,6 +98,7 @@ func pdsCmd() *cli.Command {
 				PLCURL:         c.String("plc"),
 				JWTSigningKey:  c.String("jwt-signing-key"),
 				ServiceDID:     c.String("service-did"),
+				Hostname:       c.String("hostname"),
 				UserDomains:    c.StringSlice("user-domains"),
 				ContactEmail:   c.String("contact-email"),
 				PrivacyPolicy:  c.String("privacy-policy"),

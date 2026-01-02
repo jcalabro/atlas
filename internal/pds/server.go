@@ -41,6 +41,7 @@ type Args struct {
 
 	JWTSigningKey  string
 	ServiceDID     string
+	Hostname       string
 	UserDomains    []string
 	ContactEmail   string
 	PrivacyPolicy  string
@@ -67,6 +68,7 @@ type server struct {
 type config struct {
 	signingKey     *ecdsa.PrivateKey
 	serviceDID     string
+	hostname       string
 	userDomains    []string
 	contactEmail   string
 	privacyPolicy  string
@@ -135,6 +137,7 @@ func Run(ctx context.Context, args *Args) error {
 		cfg: config{
 			signingKey:     signingKey,
 			serviceDID:     args.ServiceDID,
+			hostname:       args.Hostname,
 			userDomains:    args.UserDomains,
 			contactEmail:   args.ContactEmail,
 			privacyPolicy:  args.PrivacyPolicy,
@@ -225,7 +228,7 @@ func (s *server) plaintextOK(w http.ResponseWriter, msg string, args ...any) {
 }
 
 func (s *server) plaintextWithCode(w http.ResponseWriter, code int, msg string, args ...any) {
-	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(code)
 	fmt.Fprintf(w, msg, args...)
 }
@@ -270,16 +273,31 @@ func (s *server) router() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	//
-	// Misc. routes
+	// Base routes
 	//
 
+	mux.HandleFunc("GET /", s.handleRoot)
 	mux.HandleFunc("GET /ping", s.handlePing)
-	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
+	mux.HandleFunc("GET /robots.txt", s.handleRobots)
+
+	//
+	// Well-known routes
+	//
+
+	mux.HandleFunc("GET /.well-known/did.json", s.handleWellKnown)
+	mux.HandleFunc("GET /.well-known/atproto-did", s.handleAtprotoDid)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.handleOauthProtectedResource)
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.handleOauthAuthorizationServer)
+
+	//
+	// Misc. routes
+	//
 
 	//
 	// PDS routes
 	//
 
+	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
 	mux.HandleFunc("GET /xrpc/com.atproto.server.describeServer", s.handleDescribeServer)
 	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)
