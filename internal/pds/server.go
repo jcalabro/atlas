@@ -290,11 +290,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.handleOauthAuthorizationServer)
 
 	//
-	// Misc. routes
-	//
-
-	//
-	// PDS routes
+	// Public routes
 	//
 
 	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
