@@ -28,7 +28,7 @@ jobs:
         run: |
           just up
 
-      - name: Run Tests
+      - name: Run Tests (race detector enabled)
         run: |
           just test
 

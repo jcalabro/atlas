@@ -32,7 +32,7 @@ func (s *server) createSession(ctx context.Context, actor *types.Actor) (*Sessio
 
 	accessClaims := jwt.MapClaims{
 		"scope": "com.atproto.access",
-		"aud":   s.serviceDID,
+		"aud":   s.cfg.serviceDID,
 		"sub":   actor.Did,
 		"iat":   now.UTC().Unix(),
 		"exp":   accexp.UTC().Unix(),
@@ -41,7 +41,7 @@ func (s *server) createSession(ctx context.Context, actor *types.Actor) (*Sessio
 
 	refreshClaims := jwt.MapClaims{
 		"scope": "com.atproto.refresh",
-		"aud":   s.serviceDID,
+		"aud":   s.cfg.serviceDID,
 		"sub":   actor.Did,
 		"iat":   now.UTC().Unix(),
 		"exp":   refexp.UTC().Unix(),
@@ -49,13 +49,13 @@ func (s *server) createSession(ctx context.Context, actor *types.Actor) (*Sessio
 	}
 
 	accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
-	accessString, err := accessToken.SignedString(s.signingKey)
+	accessString, err := accessToken.SignedString(s.cfg.signingKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign access token: %w", err)
 	}
 
 	refreshToken := jwt.NewWithClaims(jwt.SigningMethodES256, refreshClaims)
-	refreshString, err := refreshToken.SignedString(s.signingKey)
+	refreshString, err := refreshToken.SignedString(s.cfg.signingKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign refresh token: %w", err)
 	}
@@ -99,7 +99,7 @@ func (s *server) verifyToken(ctx context.Context, tokenString string, expectedSc
 		if _, ok := token.Method.(*jwt.SigningMethodECDSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return &s.signingKey.PublicKey, nil
+		return &s.cfg.signingKey.PublicKey, nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse token: %w", err)
@@ -126,8 +126,8 @@ func (s *server) verifyToken(ctx context.Context, tokenString string, expectedSc
 	if !ok {
 		return nil, fmt.Errorf("missing or invalid aud claim")
 	}
-	if aud != s.serviceDID {
-		return nil, fmt.Errorf("invalid audience: expected %s, got %s", s.serviceDID, aud)
+	if aud != s.cfg.serviceDID {
+		return nil, fmt.Errorf("invalid audience: expected %s, got %s", s.cfg.serviceDID, aud)
 	}
 
 	sub, ok := claims["sub"].(string)

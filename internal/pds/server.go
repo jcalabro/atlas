@@ -37,25 +37,40 @@ type Args struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	PLCURL        string
-	JWTSigningKey string
-	ServiceDID    string
+	PLCURL string
+
+	JWTSigningKey  string
+	ServiceDID     string
+	UserDomains    []string
+	ContactEmail   string
+	PrivacyPolicy  string
+	TermsOfService string
 
 	FDB foundation.Config
 }
 
 type server struct {
+	shutdownOnce sync.Once
+
 	log    *slog.Logger
 	tracer trace.Tracer
 
-	shutdownOnce sync.Once
+	cfg config
 
 	db *foundation.DB
 
-	directory  identity.Directory
-	plc        plc.PLC
-	signingKey *ecdsa.PrivateKey
-	serviceDID string
+	directory identity.Directory
+	plc       plc.PLC
+}
+
+// Static config that's loaded at startup and never changed
+type config struct {
+	signingKey     *ecdsa.PrivateKey
+	serviceDID     string
+	userDomains    []string
+	contactEmail   string
+	privacyPolicy  string
+	termsOfService string
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -116,13 +131,22 @@ func Run(ctx context.Context, args *Args) error {
 	s := &server{
 		log:    log,
 		tracer: tracer,
-		db:     db,
+
+		cfg: config{
+			signingKey:     signingKey,
+			serviceDID:     args.ServiceDID,
+			userDomains:    args.UserDomains,
+			contactEmail:   args.ContactEmail,
+			privacyPolicy:  args.PrivacyPolicy,
+			termsOfService: args.TermsOfService,
+		},
+
+		db: db,
 
 		// @TODO (jrc): use foundation rather than caching in-memory
-		directory:  identity.DefaultDirectory(),
-		plc:        plcClient,
-		signingKey: signingKey,
-		serviceDID: args.ServiceDID,
+		directory: identity.DefaultDirectory(),
+
+		plc: plcClient,
 	}
 
 	cancelOnce := &sync.Once{}
@@ -256,6 +280,7 @@ func (s *server) router() *http.ServeMux {
 	// PDS routes
 	//
 
+	mux.HandleFunc("GET /xrpc/com.atproto.server.describeServer", s.handleDescribeServer)
 	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)
 

@@ -2,7 +2,7 @@ set dotenv-required
 set shell := ["bash", "-cu"]
 
 # Lints and runs all tests
-default: lint test
+default: lint t
 
 # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
 install-tools:

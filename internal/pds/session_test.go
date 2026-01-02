@@ -23,8 +23,8 @@ func TestCreateSession(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.signingKey = signingKey
-	srv.serviceDID = "did:plc:test-service-12345"
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
 
 	t.Run("creates valid access and refresh tokens", func(t *testing.T) {
 		actor := &types.Actor{
@@ -216,8 +216,8 @@ func TestVerifyAccessToken(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.signingKey = signingKey
-	srv.serviceDID = "did:plc:test-service-12345"
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
 
 	t.Run("verifies valid access token", func(t *testing.T) {
 		t.Parallel()
@@ -279,7 +279,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.serviceDID,
+			"aud":   srv.cfg.serviceDID,
 			"sub":   "did:plc:testuser789",
 			"iat":   expiredTime.UTC().Unix(),
 			"exp":   expiredTime.UTC().Unix(),
@@ -328,7 +328,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.serviceDID,
+			"aud":   srv.cfg.serviceDID,
 			"sub":   "did:plc:testuser131415",
 			"iat":   now.UTC().Unix(),
 			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
@@ -358,7 +358,7 @@ func TestVerifyAccessToken(t *testing.T) {
 		// Missing sub claim
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.serviceDID,
+			"aud":   srv.cfg.serviceDID,
 			"iat":   now.UTC().Unix(),
 			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
 			"jti":   "test-jti-abc",
@@ -382,8 +382,8 @@ func TestVerifyRefreshToken(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.signingKey = signingKey
-	srv.serviceDID = "did:plc:test-service-12345"
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
 
 	t.Run("verifies valid refresh token", func(t *testing.T) {
 		t.Parallel()
@@ -445,7 +445,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 
 		refreshClaims := jwt.MapClaims{
 			"scope": "com.atproto.refresh",
-			"aud":   srv.serviceDID,
+			"aud":   srv.cfg.serviceDID,
 			"sub":   "did:plc:testuser789",
 			"iat":   expiredTime.UTC().Unix(),
 			"exp":   expiredTime.UTC().Unix(),

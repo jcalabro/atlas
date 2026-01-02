@@ -39,12 +39,21 @@ func testServer(t *testing.T) *server {
 	require.NoError(t, err)
 
 	return &server{
-		log:        slog.Default(),
-		tracer:     otel.Tracer("test"),
-		db:         testDB,
-		directory:  &dir,
-		signingKey: signingKey,
-		serviceDID: "did:plc:test-service-12345",
-		plc:        &plc.MockClient{},
+		log:    slog.Default(),
+		tracer: otel.Tracer("test"),
+
+		cfg: config{
+			signingKey:     signingKey,
+			serviceDID:     "did:web:dev.atlaspds.dev",
+			userDomains:    []string{".dev.atlaspds.dev"},
+			contactEmail:   "webmaster@dev.atlaspds.dev",
+			privacyPolicy:  "https://dev.atlaspds.dev/privacy",
+			termsOfService: "https://dev.atlaspds.dev/tos",
+		},
+
+		db: testDB,
+
+		directory: &dir,
+		plc:       &plc.MockClient{},
 	}
 }

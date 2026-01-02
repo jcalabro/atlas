@@ -9,7 +9,7 @@ $ just --list
 Available recipes:
     build-protos       # Generates protobuf sources
     cover              # run `just test` first, then run this to view test coverage
-    default            # Lints and runs all tests
+    default            # Lints and runs all tests (race detector disabled)
     down               # Tears down the local development dependencies
     fdbcli             # Connects to the local foundationdb developement server
     install-tools      # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
@@ -21,9 +21,9 @@ Available recipes:
     up                 # Stands up local development dependencies in docker
 ```
 
-Typically, to test, you should run `just`. This will run the linter and all tests with the race detector enabled.
+Typically, to test, you should run `just lint && just test`. This will run the linter and all tests with the race detector enabled.
 
-To build and run a go executable, you should typically run `just run pds`.
+To build and run a go executable, you should typically run `just run pds`. This runs the server with the race detector enabled.
 
 All commands should use the `justfile`. It is quite rare to need to reach directly for the `go` compiler, or other tools. The `justfile` is designed to be comprehensive.
 

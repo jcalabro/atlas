@@ -12,13 +12,15 @@ import (
 
 var (
 	defaultSigningKeyPath = "./testdata/jwt-signing-key.pem"
-	defaultServiceDID     = "did:plc:55dc5b2vvjkevznieq2y76je"
+	defaultServiceDID     = "did:web:dev.atlaspds.net"
+	defaultUserDomains    = []string{".dev.atlaspds.net"}
 )
 
 func init() {
 	if env.IsProd() {
 		defaultSigningKeyPath = ""
 		defaultServiceDID = ""
+		defaultUserDomains = []string{}
 	}
 }
 
@@ -62,16 +64,37 @@ func pdsCmd() *cli.Command {
 				Usage: "DID of this PDS service (used as 'aud' claim in JWTs)",
 				Value: defaultServiceDID,
 			},
+			&cli.StringSliceFlag{
+				Name:  "user-domains",
+				Usage: "List of domains on which users are allowed to signup",
+				Value: defaultUserDomains,
+			},
+			&cli.StringFlag{
+				Name:  "contact-email",
+				Usage: "Contact email for the server admin",
+			},
+			&cli.StringFlag{
+				Name:  "privacy-policy",
+				Usage: "Link to the privacy policy document",
+			},
+			&cli.StringFlag{
+				Name:  "terms-of-service",
+				Usage: "Link to the terms of service document",
+			},
 		),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return pds.Run(ctx, &pds.Args{
-				Addr:          c.String("addr"),
-				MetricsAddr:   c.String("metrics-addr"),
-				ReadTimeout:   c.Duration("read-timeout"),
-				WriteTimeout:  c.Duration("write-timeout"),
-				PLCURL:        c.String("plc"),
-				JWTSigningKey: c.String("jwt-signing-key"),
-				ServiceDID:    c.String("service-did"),
+				Addr:           c.String("addr"),
+				MetricsAddr:    c.String("metrics-addr"),
+				ReadTimeout:    c.Duration("read-timeout"),
+				WriteTimeout:   c.Duration("write-timeout"),
+				PLCURL:         c.String("plc"),
+				JWTSigningKey:  c.String("jwt-signing-key"),
+				ServiceDID:     c.String("service-did"),
+				UserDomains:    c.StringSlice("user-domains"),
+				ContactEmail:   c.String("contact-email"),
+				PrivacyPolicy:  c.String("privacy-policy"),
+				TermsOfService: c.String("terms-of-service"),
 				FDB: foundation.Config{
 					ClusterFile: c.String("fdb-cluster-file"),
 					APIVersion:  c.Int("fdb-api-version"),
