@@ -21,7 +21,7 @@ Available recipes:
     up                 # Stands up local development dependencies in docker
 ```
 
-Typically, to test, you should run `just lint && just test`. This will run the linter and all tests with the race detector enabled.
+Typically, to test, you should simply run `just`. This will run the linter and all tests with the race detector enabled.
 
 To build and run a go executable, you should typically run `just run pds`. This runs the server with the race detector enabled.
 
@@ -47,7 +47,7 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
 - **Signal handling**: Graceful shutdown on SIGINT/SIGTERM to allow in-progress queries to finish
 - **Error handling**: Wrapped errors with context via `fmt.Errorf`. Errors must be handled properly and robustly. Never use `panic`.
 - **Testing**: The code that we write should be well tested
-    - When writing a new feature, don't ask me if tests should be writte; just write them
+    - When writing a new feature or major chunk of code, don't ask me if tests should be written; just write them
     - The tests should be thorough enough that we have reasonably high confidence in them, but not so aggressive to be "overfit"
     - Tests should use `t.Parallel()` wherever possible for performance and to better attempt to detect race conditions
     - Declare a `ctx := t.Context()` at the top of each test function that needs a context object and use that throughout. Don't use `context.Background()` if you can avoid it.

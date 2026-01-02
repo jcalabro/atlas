@@ -1,8 +1,8 @@
 set dotenv-required
 set shell := ["bash", "-cu"]
 
-# Lints and runs all tests
-default: lint t
+# Lints and runs all tests with the race detector enabled
+default: lint test
 
 # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
 install-tools:

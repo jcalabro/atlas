@@ -2,12 +2,18 @@ package pds
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
+	"github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jcalabro/atlas/internal/types"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -19,6 +25,86 @@ const (
 type Session struct {
 	AccessToken  string `json:"accessToken"`
 	RefreshToken string `json:"refreshToken"`
+}
+
+func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var in atproto.ServerCreateSession_Input
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	if in.Identifier == "" || in.Password == "" {
+		s.badRequest(w, fmt.Errorf("identifier and password are required"))
+		return
+	}
+
+	// normalize identifier
+	identifier := strings.ToLower(in.Identifier)
+
+	var (
+		actor *types.Actor
+		err   error
+	)
+
+	if strings.HasPrefix(identifier, "did:") {
+		// try parsing as DID first
+		if _, parseErr := syntax.ParseDID(identifier); parseErr == nil {
+			actor, err = s.db.GetActorByDID(ctx, identifier)
+		}
+	} else {
+		// try parsing as handle
+		if handle, parseErr := syntax.ParseHandle(identifier); parseErr == nil {
+			actor, err = s.db.GetActorByHandle(ctx, handle.String())
+		} else {
+			// fall back to email
+			actor, err = s.db.GetActorByEmail(ctx, identifier)
+		}
+	}
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to lookup account: %w", err))
+		return
+	}
+
+	if actor == nil {
+		s.badRequest(w, fmt.Errorf("invalid account identifier or password"))
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword(actor.PasswordHash, []byte(in.Password)); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid identifier or password"))
+		return
+	}
+
+	session, err := s.createSession(ctx, actor)
+	if err != nil {
+		s.log.Error("failed to create session", "did", actor.Did, "err", err)
+		s.internalErr(w, fmt.Errorf("failed to create session"))
+		return
+	}
+
+	// build response
+	var status *string
+	if !actor.Active {
+		deactivated := "deactivated"
+		status = &deactivated
+	}
+
+	resp := &atproto.ServerCreateSession_Output{
+		AccessJwt:       session.AccessToken,
+		RefreshJwt:      session.RefreshToken,
+		Handle:          actor.Handle,
+		Did:             actor.Did,
+		Email:           &actor.Email,
+		EmailConfirmed:  &actor.EmailConfirmed,
+		EmailAuthFactor: new(bool), // not implemented
+		Active:          &actor.Active,
+		Status:          status,
+	}
+
+	s.jsonOK(w, resp)
 }
 
 func (s *server) createSession(ctx context.Context, actor *types.Actor) (*Session, error) {

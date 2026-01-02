@@ -5,13 +5,17 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jcalabro/atlas/internal/types"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -44,8 +48,8 @@ func TestCreateSession(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, session)
 
-		assert.NotEmpty(t, session.AccessToken)
-		assert.NotEmpty(t, session.RefreshToken)
+		require.NotEmpty(t, session.AccessToken)
+		require.NotEmpty(t, session.RefreshToken)
 
 		accessToken, err := jwt.Parse(session.AccessToken, func(token *jwt.Token) (any, error) {
 			return &signingKey.PublicKey, nil
@@ -55,10 +59,10 @@ func TestCreateSession(t *testing.T) {
 
 		accessClaims, ok := accessToken.Claims.(jwt.MapClaims)
 		require.True(t, ok)
-		assert.Equal(t, "com.atproto.access", accessClaims["scope"])
-		assert.Equal(t, "did:plc:test-service-12345", accessClaims["aud"])
-		assert.Equal(t, "did:plc:testuser123", accessClaims["sub"])
-		assert.NotEmpty(t, accessClaims["jti"])
+		require.Equal(t, "com.atproto.access", accessClaims["scope"])
+		require.Equal(t, "did:plc:test-service-12345", accessClaims["aud"])
+		require.Equal(t, "did:plc:testuser123", accessClaims["sub"])
+		require.NotEmpty(t, accessClaims["jti"])
 
 		refreshToken, err := jwt.Parse(session.RefreshToken, func(token *jwt.Token) (any, error) {
 			return &signingKey.PublicKey, nil
@@ -68,12 +72,12 @@ func TestCreateSession(t *testing.T) {
 
 		refreshClaims, ok := refreshToken.Claims.(jwt.MapClaims)
 		require.True(t, ok)
-		assert.Equal(t, "com.atproto.refresh", refreshClaims["scope"])
-		assert.Equal(t, "did:plc:test-service-12345", refreshClaims["aud"])
-		assert.Equal(t, "did:plc:testuser123", refreshClaims["sub"])
-		assert.NotEmpty(t, refreshClaims["jti"])
+		require.Equal(t, "com.atproto.refresh", refreshClaims["scope"])
+		require.Equal(t, "did:plc:test-service-12345", refreshClaims["aud"])
+		require.Equal(t, "did:plc:testuser123", refreshClaims["sub"])
+		require.NotEmpty(t, refreshClaims["jti"])
 
-		assert.Equal(t, accessClaims["jti"], refreshClaims["jti"])
+		require.Equal(t, accessClaims["jti"], refreshClaims["jti"])
 	})
 
 	t.Run("saves refresh token to actor", func(t *testing.T) {
@@ -98,13 +102,13 @@ func TestCreateSession(t *testing.T) {
 		require.NotNil(t, retrievedActor)
 
 		require.Len(t, retrievedActor.RefreshTokens, 1)
-		assert.Equal(t, session.RefreshToken, retrievedActor.RefreshTokens[0].Token)
-		assert.NotNil(t, retrievedActor.RefreshTokens[0].CreatedAt)
-		assert.NotNil(t, retrievedActor.RefreshTokens[0].ExpiresAt)
+		require.Equal(t, session.RefreshToken, retrievedActor.RefreshTokens[0].Token)
+		require.NotNil(t, retrievedActor.RefreshTokens[0].CreatedAt)
+		require.NotNil(t, retrievedActor.RefreshTokens[0].ExpiresAt)
 
 		expiresAt := retrievedActor.RefreshTokens[0].ExpiresAt.AsTime()
 		expectedExpiry := time.Now().Add(refreshTokenTTL)
-		assert.WithinDuration(t, expectedExpiry, expiresAt, 5*time.Second)
+		require.WithinDuration(t, expectedExpiry, expiresAt, 5*time.Second)
 	})
 
 	t.Run("supports multiple refresh tokens per actor", func(t *testing.T) {
@@ -135,10 +139,10 @@ func TestCreateSession(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, retrievedActor.RefreshTokens, 2)
 
-		assert.Equal(t, session1.RefreshToken, retrievedActor.RefreshTokens[0].Token)
-		assert.Equal(t, session2.RefreshToken, retrievedActor.RefreshTokens[1].Token)
-		assert.NotEqual(t, session1.RefreshToken, session2.RefreshToken)
-		assert.NotEqual(t, session1.AccessToken, session2.AccessToken)
+		require.Equal(t, session1.RefreshToken, retrievedActor.RefreshTokens[0].Token)
+		require.Equal(t, session2.RefreshToken, retrievedActor.RefreshTokens[1].Token)
+		require.NotEqual(t, session1.RefreshToken, session2.RefreshToken)
+		require.NotEqual(t, session1.AccessToken, session2.AccessToken)
 	})
 
 	t.Run("access token expires in 3 hours", func(t *testing.T) {
@@ -171,7 +175,7 @@ func TestCreateSession(t *testing.T) {
 
 		expTime := time.Unix(int64(exp), 0)
 		expectedExpiry := time.Now().Add(accessTokenTTL)
-		assert.WithinDuration(t, expectedExpiry, expTime, 5*time.Second)
+		require.WithinDuration(t, expectedExpiry, expTime, 5*time.Second)
 	})
 
 	t.Run("refresh token expires in 7 days", func(t *testing.T) {
@@ -204,7 +208,7 @@ func TestCreateSession(t *testing.T) {
 
 		expTime := time.Unix(int64(exp), 0)
 		expectedExpiry := time.Now().Add(refreshTokenTTL)
-		assert.WithinDuration(t, expectedExpiry, expTime, 5*time.Second)
+		require.WithinDuration(t, expectedExpiry, expTime, 5*time.Second)
 	})
 }
 
@@ -242,9 +246,9 @@ func TestVerifyAccessToken(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, claims)
 
-		assert.Equal(t, "did:plc:testuser123", claims.DID)
-		assert.Equal(t, "com.atproto.access", claims.Scope)
-		assert.NotEmpty(t, claims.JTI)
+		require.Equal(t, "did:plc:testuser123", claims.DID)
+		require.Equal(t, "com.atproto.access", claims.Scope)
+		require.NotEmpty(t, claims.JTI)
 	})
 
 	t.Run("rejects refresh token when expecting access token", func(t *testing.T) {
@@ -268,7 +272,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		_, err = srv.verifyAccessToken(ctx, session.RefreshToken)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid scope")
+		require.Contains(t, err.Error(), "invalid scope")
 	})
 
 	t.Run("rejects expired access token", func(t *testing.T) {
@@ -292,7 +296,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		_, err = srv.verifyAccessToken(ctx, accessString)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "token is expired")
+		require.Contains(t, err.Error(), "token is expired")
 	})
 
 	t.Run("rejects token with wrong audience", func(t *testing.T) {
@@ -315,7 +319,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		_, err = srv.verifyAccessToken(ctx, accessString)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid audience")
+		require.Contains(t, err.Error(), "invalid audience")
 	})
 
 	t.Run("rejects token signed with wrong key", func(t *testing.T) {
@@ -370,7 +374,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		_, err = srv.verifyAccessToken(ctx, accessString)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "missing or invalid sub claim")
+		require.Contains(t, err.Error(), "missing or invalid sub claim")
 	})
 }
 
@@ -408,9 +412,9 @@ func TestVerifyRefreshToken(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, claims)
 
-		assert.Equal(t, "did:plc:testuser123", claims.DID)
-		assert.Equal(t, "com.atproto.refresh", claims.Scope)
-		assert.NotEmpty(t, claims.JTI)
+		require.Equal(t, "did:plc:testuser123", claims.DID)
+		require.Equal(t, "com.atproto.refresh", claims.Scope)
+		require.NotEmpty(t, claims.JTI)
 	})
 
 	t.Run("rejects access token when expecting refresh token", func(t *testing.T) {
@@ -434,7 +438,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 
 		_, err = srv.verifyRefreshToken(ctx, session.AccessToken)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid scope")
+		require.Contains(t, err.Error(), "invalid scope")
 	})
 
 	t.Run("rejects expired refresh token", func(t *testing.T) {
@@ -458,7 +462,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 
 		_, err = srv.verifyRefreshToken(ctx, refreshString)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "token is expired")
+		require.Contains(t, err.Error(), "token is expired")
 	})
 
 	t.Run("access and refresh tokens have matching JTI", func(t *testing.T) {
@@ -486,7 +490,203 @@ func TestVerifyRefreshToken(t *testing.T) {
 		refreshClaims, err := srv.verifyRefreshToken(ctx, session.RefreshToken)
 		require.NoError(t, err)
 
-		assert.Equal(t, accessClaims.JTI, refreshClaims.JTI)
-		assert.Equal(t, accessClaims.DID, refreshClaims.DID)
+		require.Equal(t, accessClaims.JTI, refreshClaims.JTI)
+		require.Equal(t, accessClaims.DID, refreshClaims.DID)
+	})
+}
+
+func TestHandleCreateSession(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
+
+	setupTestActor := func(did, email, handle, password string) *types.Actor {
+		pwHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            did,
+			Email:          email,
+			Handle:         handle,
+			PasswordHash:   pwHash,
+			EmailConfirmed: true,
+			CreatedAt:      timestamppb.Now(),
+			Active:         true,
+			RefreshTokens:  []*types.RefreshToken{},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		return actor
+	}
+
+	t.Run("creates session with DID identifier", func(t *testing.T) {
+		t.Parallel()
+
+		actor := setupTestActor("did:plc:testuser1", "test1@example.com", "test1.bsky.social", "password123")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"identifier":"did:plc:testuser1","password":"password123"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		require.NotEmpty(t, resp["accessJwt"])
+		require.NotEmpty(t, resp["refreshJwt"])
+		require.Equal(t, actor.Did, resp["did"])
+		require.Equal(t, actor.Handle, resp["handle"])
+		require.Equal(t, actor.Email, resp["email"])
+		require.Equal(t, true, resp["emailConfirmed"])
+		require.Equal(t, true, resp["active"])
+	})
+
+	t.Run("creates session with handle identifier", func(t *testing.T) {
+		t.Parallel()
+
+		actor := setupTestActor("did:plc:testuser2", "test2@example.com", "test2.bsky.social", "password456")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"identifier":"test2.bsky.social","password":"password456"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, resp["did"])
+		require.Equal(t, actor.Handle, resp["handle"])
+	})
+
+	t.Run("creates session with email identifier", func(t *testing.T) {
+		t.Parallel()
+
+		actor := setupTestActor("did:plc:testuser3", "test3@example.com", "test3.bsky.social", "password789")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"identifier":"test3@example.com","password":"password789"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, resp["did"])
+		require.Equal(t, actor.Handle, resp["handle"])
+		require.Equal(t, actor.Email, resp["email"])
+	})
+
+	t.Run("rejects invalid password", func(t *testing.T) {
+		t.Parallel()
+
+		setupTestActor("did:plc:testuser4", "test4@example.com", "test4.bsky.social", "correctpassword")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"identifier":"test4@example.com","password":"wrongpassword"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("rejects non-existent user", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"identifier":"nonexistent@example.com","password":"password"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("rejects missing identifier", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"password":"password"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("rejects missing password", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"identifier":"test@example.com"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("includes deactivated status for inactive account", func(t *testing.T) {
+		t.Parallel()
+
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            "did:plc:testuser5",
+			Email:          "test5@example.com",
+			Handle:         "test5.bsky.social",
+			PasswordHash:   pwHash,
+			EmailConfirmed: true,
+			CreatedAt:      timestamppb.Now(),
+			Active:         false, // inactive account
+			RefreshTokens:  []*types.RefreshToken{},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		reqBody := `{"identifier":"test5@example.com","password":"password"}`
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err = json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		require.Equal(t, false, resp["active"])
+		require.Equal(t, "deactivated", resp["status"])
 	})
 }

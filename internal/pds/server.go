@@ -301,6 +301,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /xrpc/com.atproto.server.describeServer", s.handleDescribeServer)
 	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)
+	mux.HandleFunc("POST /xrpc/com.atproto.server.createSession", s.handleCreateSession)
 
 	return mux
 }

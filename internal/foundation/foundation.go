@@ -22,8 +22,9 @@ type DB struct {
 	tracer trace.Tracer
 	db     *fdb.Database
 
-	actors      directory.DirectorySubspace
-	didsByEmail directory.DirectorySubspace
+	actors       directory.DirectorySubspace
+	didsByEmail  directory.DirectorySubspace
+	didsByHandle directory.DirectorySubspace
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -61,6 +62,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	db.didsByEmail, err = directory.CreateOrOpen(db.db, []string{"dids_by_email"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dids_by_email directory: %w", err)
+	}
+
+	db.didsByHandle, err = directory.CreateOrOpen(db.db, []string{"dids_by_handle"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dids_by_handle directory: %w", err)
 	}
 
 	return db, nil

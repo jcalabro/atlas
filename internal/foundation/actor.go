@@ -20,14 +20,36 @@ func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) error {
 
 	actorKey := pack(db.actors, actor.Did)
 	didByEmailKey := pack(db.didsByEmail, actor.Email)
+	didByHandleKey := pack(db.didsByHandle, actor.Handle)
 
 	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
 		tx.Set(actorKey, buf)
 		tx.Set(didByEmailKey, []byte(actor.Did))
+		tx.Set(didByHandleKey, []byte(actor.Did))
 		return nil, nil
 	})
 
 	return err
+}
+
+func (db *DB) GetActorByDID(ctx context.Context, did string) (*types.Actor, error) {
+	_, span := db.tracer.Start(ctx, "GetActorByDID")
+	defer span.End()
+
+	actorKey := pack(db.actors, did)
+
+	var actor types.Actor
+	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
+		return tx.Get(actorKey).Get()
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+
+	return &actor, nil
 }
 
 func (db *DB) GetActorByEmail(ctx context.Context, email string) (*types.Actor, error) {
@@ -38,15 +60,44 @@ func (db *DB) GetActorByEmail(ctx context.Context, email string) (*types.Actor, 
 
 	var actor types.Actor
 	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
-		email, err := tx.Get(didByEmailKey).Get()
+		did, err := tx.Get(didByEmailKey).Get()
 		if err != nil {
 			return nil, err
 		}
-		if len(email) == 0 {
+		if len(did) == 0 {
 			return nil, nil // not found
 		}
 
-		actorKey := pack(db.actors, string(email))
+		actorKey := pack(db.actors, string(did))
+		return tx.Get(actorKey).Get()
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return nil, nil
+	}
+
+	return &actor, nil
+}
+
+func (db *DB) GetActorByHandle(ctx context.Context, handle string) (*types.Actor, error) {
+	_, span := db.tracer.Start(ctx, "GetActorByHandle")
+	defer span.End()
+
+	didByHandleKey := pack(db.didsByHandle, handle)
+
+	var actor types.Actor
+	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
+		did, err := tx.Get(didByHandleKey).Get()
+		if err != nil {
+			return nil, err
+		}
+		if len(did) == 0 {
+			return nil, nil // not found
+		}
+
+		actorKey := pack(db.actors, string(did))
 		return tx.Get(actorKey).Get()
 	})
 	if err != nil {
