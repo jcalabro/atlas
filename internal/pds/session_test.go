@@ -17,7 +17,6 @@ import (
 
 func TestCreateSession(t *testing.T) {
 	t.Parallel()
-
 	ctx := context.Background()
 
 	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -206,5 +205,288 @@ func TestCreateSession(t *testing.T) {
 		expTime := time.Unix(int64(exp), 0)
 		expectedExpiry := time.Now().Add(refreshTokenTTL)
 		assert.WithinDuration(t, expectedExpiry, expTime, 5*time.Second)
+	})
+}
+
+func TestVerifyAccessToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.signingKey = signingKey
+	srv.serviceDID = "did:plc:test-service-12345"
+
+	t.Run("verifies valid access token", func(t *testing.T) {
+		t.Parallel()
+
+		actor := &types.Actor{
+			Did:           "did:plc:testuser123",
+			Email:         "test@example.com",
+			Handle:        "test.bsky.social",
+			CreatedAt:     timestamppb.Now(),
+			Active:        true,
+			RefreshTokens: []*types.RefreshToken{},
+		}
+
+		if err := srv.db.SaveActor(ctx, actor); err != nil {
+			t.Fatalf("failed to save actor: %v", err)
+		}
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		claims, err := srv.verifyAccessToken(ctx, session.AccessToken)
+		require.NoError(t, err)
+		require.NotNil(t, claims)
+
+		assert.Equal(t, "did:plc:testuser123", claims.DID)
+		assert.Equal(t, "com.atproto.access", claims.Scope)
+		assert.NotEmpty(t, claims.JTI)
+	})
+
+	t.Run("rejects refresh token when expecting access token", func(t *testing.T) {
+		t.Parallel()
+
+		actor := &types.Actor{
+			Did:           "did:plc:testuser456",
+			Email:         "test2@example.com",
+			Handle:        "test2.bsky.social",
+			CreatedAt:     timestamppb.Now(),
+			Active:        true,
+			RefreshTokens: []*types.RefreshToken{},
+		}
+
+		if err := srv.db.SaveActor(ctx, actor); err != nil {
+			t.Fatalf("failed to save actor: %v", err)
+		}
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		_, err = srv.verifyAccessToken(ctx, session.RefreshToken)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid scope")
+	})
+
+	t.Run("rejects expired access token", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+		expiredTime := now.Add(-1 * time.Hour)
+
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   srv.serviceDID,
+			"sub":   "did:plc:testuser789",
+			"iat":   expiredTime.UTC().Unix(),
+			"exp":   expiredTime.UTC().Unix(),
+			"jti":   "test-jti-123",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		_, err = srv.verifyAccessToken(ctx, accessString)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "token is expired")
+	})
+
+	t.Run("rejects token with wrong audience", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   "did:plc:wrong-service",
+			"sub":   "did:plc:testuser101112",
+			"iat":   now.UTC().Unix(),
+			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
+			"jti":   "test-jti-456",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		_, err = srv.verifyAccessToken(ctx, accessString)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid audience")
+	})
+
+	t.Run("rejects token signed with wrong key", func(t *testing.T) {
+		t.Parallel()
+
+		wrongKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+
+		now := time.Now()
+
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   srv.serviceDID,
+			"sub":   "did:plc:testuser131415",
+			"iat":   now.UTC().Unix(),
+			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
+			"jti":   "test-jti-789",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(wrongKey)
+		require.NoError(t, err)
+
+		_, err = srv.verifyAccessToken(ctx, accessString)
+		require.Error(t, err)
+	})
+
+	t.Run("rejects malformed token", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := srv.verifyAccessToken(ctx, "not.a.valid.jwt")
+		require.Error(t, err)
+	})
+
+	t.Run("rejects token with missing claims", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+
+		// Missing sub claim
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   srv.serviceDID,
+			"iat":   now.UTC().Unix(),
+			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
+			"jti":   "test-jti-abc",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		_, err = srv.verifyAccessToken(ctx, accessString)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "missing or invalid sub claim")
+	})
+}
+
+func TestVerifyRefreshToken(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.signingKey = signingKey
+	srv.serviceDID = "did:plc:test-service-12345"
+
+	t.Run("verifies valid refresh token", func(t *testing.T) {
+		t.Parallel()
+
+		actor := &types.Actor{
+			Did:           "did:plc:testuser123",
+			Email:         "test@example.com",
+			Handle:        "test.bsky.social",
+			CreatedAt:     timestamppb.Now(),
+			Active:        true,
+			RefreshTokens: []*types.RefreshToken{},
+		}
+
+		if err := srv.db.SaveActor(ctx, actor); err != nil {
+			t.Fatalf("failed to save actor: %v", err)
+		}
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		claims, err := srv.verifyRefreshToken(ctx, session.RefreshToken)
+		require.NoError(t, err)
+		require.NotNil(t, claims)
+
+		assert.Equal(t, "did:plc:testuser123", claims.DID)
+		assert.Equal(t, "com.atproto.refresh", claims.Scope)
+		assert.NotEmpty(t, claims.JTI)
+	})
+
+	t.Run("rejects access token when expecting refresh token", func(t *testing.T) {
+		t.Parallel()
+
+		actor := &types.Actor{
+			Did:           "did:plc:testuser456",
+			Email:         "test2@example.com",
+			Handle:        "test2.bsky.social",
+			CreatedAt:     timestamppb.Now(),
+			Active:        true,
+			RefreshTokens: []*types.RefreshToken{},
+		}
+
+		if err := srv.db.SaveActor(ctx, actor); err != nil {
+			t.Fatalf("failed to save actor: %v", err)
+		}
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		_, err = srv.verifyRefreshToken(ctx, session.AccessToken)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid scope")
+	})
+
+	t.Run("rejects expired refresh token", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+		expiredTime := now.Add(-8 * 24 * time.Hour)
+
+		refreshClaims := jwt.MapClaims{
+			"scope": "com.atproto.refresh",
+			"aud":   srv.serviceDID,
+			"sub":   "did:plc:testuser789",
+			"iat":   expiredTime.UTC().Unix(),
+			"exp":   expiredTime.UTC().Unix(),
+			"jti":   "test-jti-123",
+		}
+
+		refreshToken := jwt.NewWithClaims(jwt.SigningMethodES256, refreshClaims)
+		refreshString, err := refreshToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		_, err = srv.verifyRefreshToken(ctx, refreshString)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "token is expired")
+	})
+
+	t.Run("access and refresh tokens have matching JTI", func(t *testing.T) {
+		t.Parallel()
+
+		actor := &types.Actor{
+			Did:           "did:plc:testuser101112",
+			Email:         "test3@example.com",
+			Handle:        "test3.bsky.social",
+			CreatedAt:     timestamppb.Now(),
+			Active:        true,
+			RefreshTokens: []*types.RefreshToken{},
+		}
+
+		if err := srv.db.SaveActor(ctx, actor); err != nil {
+			t.Fatalf("failed to save actor: %v", err)
+		}
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		accessClaims, err := srv.verifyAccessToken(ctx, session.AccessToken)
+		require.NoError(t, err)
+
+		refreshClaims, err := srv.verifyRefreshToken(ctx, session.RefreshToken)
+		require.NoError(t, err)
+
+		assert.Equal(t, accessClaims.JTI, refreshClaims.JTI)
+		assert.Equal(t, accessClaims.DID, refreshClaims.DID)
 	})
 }
