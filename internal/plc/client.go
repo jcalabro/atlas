@@ -18,6 +18,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// We use an interface so we can easily mock out PLC operations during tests
+type PLC interface {
+	CreateDID(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery string, handle string) (string, *Operation, error)
+	SendOperation(ctx context.Context, did string, op *Operation) error
+}
+
 type Client struct {
 	tracer trace.Tracer
 
@@ -49,14 +55,7 @@ func (c *Client) CreateDID(
 	_, span := c.tracer.Start(ctx, "plc/CreateDID")
 	defer span.End()
 
-	// @TODO (jrc): load the list of supported PDS hostnames at startup
-	parts := strings.Split(handle, ".")
-	if len(parts) < 2 {
-		return "", nil, fmt.Errorf("invalid number of handle parts")
-	}
-	pdsHostname := fmt.Sprintf("%s.%s", parts[len(parts)-2], parts[len(parts)-1])
-
-	creds, err := c.CreateDIDCredentials(sigkey, rotationKey, recovery, handle, pdsHostname)
+	creds, err := createDIDCredentials(sigkey, rotationKey, recovery, handle)
 	if err != nil {
 		return "", nil, err
 	}
@@ -70,7 +69,7 @@ func (c *Client) CreateDID(
 		Prev:                nil,
 	}
 
-	if err := c.SignOp(rotationKey, &op); err != nil {
+	if err := signOp(rotationKey, &op); err != nil {
 		return "", nil, err
 	}
 
@@ -82,7 +81,18 @@ func (c *Client) CreateDID(
 	return did, &op, nil
 }
 
-func (c *Client) CreateDIDCredentials(sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (*DIDCredentials, error) {
+func createDIDCredentials(sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle string) (*DIDCredentials, error) {
+	// @TODO (jrc): load the list of supported PDS hostnames at startup
+	parts := strings.Split(handle, ".")
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid number of handle parts")
+	}
+	pdsHostname := fmt.Sprintf("%s.%s", parts[len(parts)-2], parts[len(parts)-1])
+
+	return CreateDIDCredentials(sigkey, rotationKey, recovery, handle, pdsHostname)
+}
+
+func CreateDIDCredentials(sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (*DIDCredentials, error) {
 	pubsigkey, err := sigkey.PublicKey()
 	if err != nil {
 		return nil, err
@@ -120,6 +130,10 @@ func (c *Client) CreateDIDCredentials(sigkey *atcrypto.PrivateKeyK256, rotationK
 }
 
 func (c *Client) SignOp(rotationKey atcrypto.PrivateKey, op *Operation) error {
+	return signOp(rotationKey, op)
+}
+
+func signOp(rotationKey atcrypto.PrivateKey, op *Operation) error {
 	b, err := op.MarshalCBOR()
 	if err != nil {
 		return err

@@ -50,11 +50,14 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
     - When writing a new feature, don't ask me if tests should be writte; just write them
     - The tests should be thorough enough that we have reasonably high confidence in them, but not so aggressive to be "overfit"
     - Tests should use `t.Parallel()` wherever possible for performance and to better attempt to detect race conditions
+    - Declare a `ctx := t.Context()` at the top of each test function that needs a context object and use that throughout. Don't use `context.Background()` if you can avoid it.
+    - Prefer `require` over `assert` from the testify library
 
 ## Style
 
 - We write relatively basic, straightforward go. We try not to get fancy.
 - We don't add too many comments, especially in the middle of functions. However, we always document user-facing APIs with godoc style comments (i.e. public types we expect others to import)
+- Comments that occur in the middle of functions should be `// lower case` unless they `// Are mutliple sentences. Like this.`
 - Always use `any` instead of `interface{}`. There is a linter rule to validate this.
 
 ## Development Setup

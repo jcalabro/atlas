@@ -1,12 +1,16 @@
 package pds
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"log/slog"
 	"sync"
 	"testing"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/plc"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 )
@@ -31,10 +35,16 @@ func testServer(t *testing.T) *server {
 
 	dir := identity.NewMockDirectory()
 
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
 	return &server{
-		log:       slog.Default(),
-		tracer:    otel.Tracer("test"),
-		db:        testDB,
-		directory: &dir,
+		log:        slog.Default(),
+		tracer:     otel.Tracer("test"),
+		db:         testDB,
+		directory:  &dir,
+		signingKey: signingKey,
+		serviceDID: "did:plc:test-service-12345",
+		plc:        &plc.MockClient{},
 	}
 }

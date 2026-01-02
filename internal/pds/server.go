@@ -53,7 +53,7 @@ type server struct {
 	db *foundation.DB
 
 	directory  identity.Directory
-	plc        *plc.Client
+	plc        plc.PLC
 	signingKey *ecdsa.PrivateKey
 	serviceDID string
 }
