@@ -20,4 +20,11 @@ message Actor {
   string handle = 8;
   bool active = 9;
   repeated bytes rotation_keys = 10;
+  repeated RefreshToken refresh_tokens = 11;
+}
+
+message RefreshToken {
+  string token = 1;
+  google.protobuf.Timestamp created_at = 2;
+  google.protobuf.Timestamp expires_at = 3;
 }

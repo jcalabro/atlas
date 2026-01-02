@@ -2,7 +2,10 @@ package pds
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -34,7 +37,9 @@ type Args struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	PLCURL string
+	PLCURL        string
+	JWTSigningKey string
+	ServiceDID    string
 
 	FDB foundation.Config
 }
@@ -47,8 +52,10 @@ type server struct {
 
 	db *foundation.DB
 
-	directory identity.Directory
-	plc       *plc.Client
+	directory  identity.Directory
+	plc        *plc.Client
+	signingKey *ecdsa.PrivateKey
+	serviceDID string
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -56,6 +63,25 @@ func (s *server) shutdown(cancel context.CancelFunc) {
 		s.log.Info("shutdown initiated")
 		cancel()
 	})
+}
+
+func loadSigningKey(path string) (*ecdsa.PrivateKey, error) {
+	keyBytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read signing key file: %w", err)
+	}
+
+	block, _ := pem.Decode(keyBytes)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block containing signing key")
+	}
+
+	key, err := x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse EC private key: %w", err)
+	}
+
+	return key, nil
 }
 
 func Run(ctx context.Context, args *Args) error {
@@ -77,6 +103,11 @@ func Run(ctx context.Context, args *Args) error {
 		return fmt.Errorf("failed to initialize plc client: %w", err)
 	}
 
+	signingKey, err := loadSigningKey(args.JWTSigningKey)
+	if err != nil {
+		return fmt.Errorf("failed to load JWT signing key: %w", err)
+	}
+
 	db, err := foundation.New(tracer, args.FDB)
 	if err != nil {
 		return err
@@ -88,8 +119,10 @@ func Run(ctx context.Context, args *Args) error {
 		db:     db,
 
 		// @TODO (jrc): use foundation rather than caching in-memory
-		directory: identity.DefaultDirectory(),
-		plc:       plcClient,
+		directory:  identity.DefaultDirectory(),
+		plc:        plcClient,
+		signingKey: signingKey,
+		serviceDID: args.ServiceDID,
 	}
 
 	cancelOnce := &sync.Once{}

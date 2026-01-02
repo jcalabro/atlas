@@ -4,13 +4,26 @@ import (
 	"context"
 	"time"
 
+	"github.com/jcalabro/atlas/internal/env"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/pds"
 	"github.com/urfave/cli/v3"
 )
 
 var (
-	pdsCmd = &cli.Command{
+	defaultSigningKeyPath = "./testdata/jwt-signing-key.pem"
+	defaultServiceDID     = "did:plc:55dc5b2vvjkevznieq2y76je"
+)
+
+func init() {
+	if env.IsProd() {
+		defaultSigningKeyPath = ""
+		defaultServiceDID = ""
+	}
+}
+
+func pdsCmd() *cli.Command {
+	return &cli.Command{
 		Name:        "pds",
 		Description: "Run the PDS server",
 		Flags: append(fdbFlags,
@@ -39,14 +52,26 @@ var (
 				Usage: "URL of the PLC server to use",
 				Value: "https://plc.directory",
 			},
+			&cli.StringFlag{
+				Name:  "jwt-signing-key",
+				Usage: "Path to EC private key file for signing JWTs (PEM format)",
+				Value: defaultSigningKeyPath,
+			},
+			&cli.StringFlag{
+				Name:  "service-did",
+				Usage: "DID of this PDS service (used as 'aud' claim in JWTs)",
+				Value: defaultServiceDID,
+			},
 		),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return pds.Run(ctx, &pds.Args{
-				Addr:         c.String("addr"),
-				MetricsAddr:  c.String("metrics-addr"),
-				ReadTimeout:  c.Duration("read-timeout"),
-				WriteTimeout: c.Duration("write-timeout"),
-				PLCURL:       c.String("plc"),
+				Addr:          c.String("addr"),
+				MetricsAddr:   c.String("metrics-addr"),
+				ReadTimeout:   c.Duration("read-timeout"),
+				WriteTimeout:  c.Duration("write-timeout"),
+				PLCURL:        c.String("plc"),
+				JWTSigningKey: c.String("jwt-signing-key"),
+				ServiceDID:    c.String("service-did"),
 				FDB: foundation.Config{
 					ClusterFile: c.String("fdb-cluster-file"),
 					APIVersion:  c.Int("fdb-api-version"),
@@ -54,4 +79,4 @@ var (
 			})
 		},
 	}
-)
+}

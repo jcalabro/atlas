@@ -120,11 +120,17 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	session, err := s.createSession(ctx, actor)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to create session: %w", err))
+		return
+	}
+
 	res := atproto.ServerCreateAccount_Output{
 		Did:        actor.Did,
 		Handle:     actor.Handle,
-		AccessJwt:  "", // @TODO (jrc)
-		RefreshJwt: "", // @TODO (jrc)
+		AccessJwt:  session.AccessToken,
+		RefreshJwt: session.RefreshToken,
 	}
 
 	s.jsonOK(w, res)

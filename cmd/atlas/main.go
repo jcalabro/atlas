@@ -53,7 +53,7 @@ func main() {
 			return ctx, nil
 		},
 		Commands: []*cli.Command{
-			pdsCmd,
+			pdsCmd(),
 		},
 	}
 

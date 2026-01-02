@@ -49,6 +49,7 @@ func (c *Client) CreateDID(
 	_, span := c.tracer.Start(ctx, "plc/CreateDID")
 	defer span.End()
 
+	// @TODO (jrc): load the list of supported PDS hostnames at startup
 	parts := strings.Split(handle, ".")
 	if len(parts) < 2 {
 		return "", nil, fmt.Errorf("invalid number of handle parts")

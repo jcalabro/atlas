@@ -46,11 +46,16 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
 - **Observability**: All components use structured logging (slog), OpenTelemetry tracing, and Prometheus metrics
 - **Signal handling**: Graceful shutdown on SIGINT/SIGTERM to allow in-progress queries to finish
 - **Error handling**: Wrapped errors with context via `fmt.Errorf`. Errors must be handled properly and robustly. Never use `panic`.
+- **Testing**: The code that we write should be well tested
+    - When writing a new feature, don't ask me if tests should be writte; just write them
+    - The tests should be thorough enough that we have reasonably high confidence in them, but not so aggressive to be "overfit"
+    - Tests should use `t.Parallel()` wherever possible for performance and to better attempt to detect race conditions
 
 ## Style
 
 - We write relatively basic, straightforward go. We try not to get fancy.
 - We don't add too many comments, especially in the middle of functions. However, we always document user-facing APIs with godoc style comments (i.e. public types we expect others to import)
+- Always use `any` instead of `interface{}`. There is a linter rule to validate this.
 
 ## Development Setup
 
