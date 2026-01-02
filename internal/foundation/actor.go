@@ -37,10 +37,13 @@ func (db *DB) GetActorByEmail(ctx context.Context, email string) (*types.Actor, 
 	didByEmailKey := pack(db.didsByEmail, email)
 
 	var actor types.Actor
-	err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
+	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
 		email, err := tx.Get(didByEmailKey).Get()
 		if err != nil {
 			return nil, err
+		}
+		if len(email) == 0 {
+			return nil, nil // not found
 		}
 
 		actorKey := pack(db.actors, string(email))
@@ -48,6 +51,9 @@ func (db *DB) GetActorByEmail(ctx context.Context, email string) (*types.Actor, 
 	})
 	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		return nil, nil
 	}
 
 	return &actor, nil

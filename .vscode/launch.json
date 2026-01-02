@@ -2,25 +2,14 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": "Debug Atlas Server",
+			"name": "Debug Atlas PDS",
 			"type": "go",
 			"request": "launch",
 			"mode": "auto",
 			"cwd": "${workspaceFolder}",
-			"program": "${workspaceFolder}/cmd/atlas/main.go",
+			"program": "${workspaceFolder}/cmd/atlas",
 			"args": [
-				"server"
-			]
-		},
-		{
-			"name": "Debug Atlas Ingester",
-			"type": "go",
-			"request": "launch",
-			"mode": "auto",
-			"cwd": "${workspaceFolder}",
-			"program": "${workspaceFolder}/cmd/atlas/main.go",
-			"args": [
-				"ingester"
+				"pds"
 			]
 		}
 	]

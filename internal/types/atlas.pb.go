@@ -33,6 +33,7 @@ type Actor struct {
 	SigningKey            []byte                 `protobuf:"bytes,7,opt,name=signing_key,json=signingKey,proto3" json:"signing_key,omitempty"`
 	Handle                string                 `protobuf:"bytes,8,opt,name=handle,proto3" json:"handle,omitempty"`
 	Active                bool                   `protobuf:"varint,9,opt,name=active,proto3" json:"active,omitempty"`
+	RotationKeys          [][]byte               `protobuf:"bytes,10,rep,name=rotation_keys,json=rotationKeys,proto3" json:"rotation_keys,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -130,11 +131,18 @@ func (x *Actor) GetActive() bool {
 	return false
 }
 
+func (x *Actor) GetRotationKeys() [][]byte {
+	if x != nil {
+		return x.RotationKeys
+	}
+	return nil
+}
+
 var File_atlas_proto protoreflect.FileDescriptor
 
 const file_atlas_proto_rawDesc = "" +
 	"\n" +
-	"\vatlas.proto\x12\x05types\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc1\x02\n" +
+	"\vatlas.proto\x12\x05types\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe6\x02\n" +
 	"\x05Actor\x12\x10\n" +
 	"\x03did\x18\x01 \x01(\tR\x03did\x129\n" +
 	"\n" +
@@ -146,7 +154,9 @@ const file_atlas_proto_rawDesc = "" +
 	"\vsigning_key\x18\a \x01(\fR\n" +
 	"signingKey\x12\x16\n" +
 	"\x06handle\x18\b \x01(\tR\x06handle\x12\x16\n" +
-	"\x06active\x18\t \x01(\bR\x06activeB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
+	"\x06active\x18\t \x01(\bR\x06active\x12#\n" +
+	"\rrotation_keys\x18\n" +
+	" \x03(\fR\frotationKeysB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
 
 var (
 	file_atlas_proto_rawDescOnce sync.Once

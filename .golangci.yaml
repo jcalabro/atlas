@@ -7,7 +7,11 @@ issues:
 linters:
   settings:
     errcheck:
+      check-blank: true
       check-type-assertions: true
+      exclude-functions:
+        - "fmt.Fprintf"
+      verbose: true
     gocritic:
       enable-all: true
 

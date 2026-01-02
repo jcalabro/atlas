@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace/noop"
 )
 
@@ -25,7 +26,8 @@ func TestObservabilityMiddleware(t *testing.T) {
 
 	handler := s.observabilityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("test response"))
+		_, err := w.Write([]byte("test response"))
+		require.NoError(t, err)
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/test", nil)
@@ -75,7 +77,8 @@ func TestObservabilityMiddlewareErrorStatus(t *testing.T) {
 
 	handler := s.observabilityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("error"))
+		_, err := w.Write([]byte("error"))
+		require.NoError(t, err)
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/error", nil)

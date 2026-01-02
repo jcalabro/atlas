@@ -17,6 +17,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
+	"github.com/jcalabro/atlas/internal/plc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
@@ -33,7 +34,7 @@ type Args struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	PLCAddr string
+	PLCURL string
 
 	FDB foundation.Config
 }
@@ -47,6 +48,7 @@ type server struct {
 	db *foundation.DB
 
 	directory identity.Directory
+	plc       *plc.Client
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -67,6 +69,14 @@ func Run(ctx context.Context, args *Args) error {
 	}
 	tracer := otel.Tracer(serviceName)
 
+	plcClient, err := plc.NewClient(&plc.ClientArgs{
+		Tracer: tracer,
+		PLCURL: args.PLCURL,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to initialize plc client: %w", err)
+	}
+
 	db, err := foundation.New(tracer, args.FDB)
 	if err != nil {
 		return err
@@ -79,6 +89,7 @@ func Run(ctx context.Context, args *Args) error {
 
 		// @TODO (jrc): use foundation rather than caching in-memory
 		directory: identity.DefaultDirectory(),
+		plc:       plcClient,
 	}
 
 	cancelOnce := &sync.Once{}
@@ -159,7 +170,7 @@ func (s *server) plaintextOK(w http.ResponseWriter, msg string, args ...any) {
 func (s *server) plaintextWithCode(w http.ResponseWriter, code int, msg string, args ...any) {
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(code)
-	fmt.Fprintf(w, msg, args...) // nolint:errcheck
+	fmt.Fprintf(w, msg, args...)
 }
 
 func (s *server) jsonOK(w http.ResponseWriter, resp any) {

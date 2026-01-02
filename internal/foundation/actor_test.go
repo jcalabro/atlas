@@ -113,12 +113,10 @@ func TestGetActorByEmail(t *testing.T) {
 		assert.True(t, actor.CreatedAt.AsTime().Equal(retrieved.CreatedAt.AsTime()))
 	})
 
-	t.Run("returns empty actor for non-existent email", func(t *testing.T) {
+	t.Run("returns nil for non-existent email", func(t *testing.T) {
 		actor, err := db.GetActorByEmail(ctx, "nonexistent@example.com")
 		require.NoError(t, err)
-		// When email doesn't exist, we get an empty actor
-		assert.Equal(t, "", actor.Did)
-		assert.Equal(t, "", actor.Email)
+		assert.Nil(t, actor)
 	})
 
 	t.Run("retrieves correct actor when multiple exist", func(t *testing.T) {

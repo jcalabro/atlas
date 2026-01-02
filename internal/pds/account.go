@@ -20,7 +20,8 @@ import (
 )
 
 func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
-	span := spanFromContext(r.Context())
+	ctx := r.Context()
+	span := spanFromContext(ctx)
 
 	var in atproto.ServerCreateAccount_Input
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -48,7 +49,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if the handle is already taken
-	_, err = s.directory.LookupHandle(r.Context(), handle)
+	_, err = s.directory.LookupHandle(ctx, handle)
 	if err == nil {
 		s.badRequest(w, fmt.Errorf("handle %q is already taken", in.Handle))
 		return
@@ -58,15 +59,16 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// see if the email is already taken
-	existingEmail, err := s.db.GetActorByEmail(r.Context(), *in.Email)
+	// check if the email is already taken
+	existingEmail, err := s.db.GetActorByEmail(ctx, *in.Email)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to get actor by email: %w", err))
 		return
 	}
 	if existingEmail != nil {
 		// @NOTE (jrc): We should send a 200 of some kind here to ensure we're not opening
-		// ourselves up to email enumeration attacks. How can we do this in the XRPC API?
+		// ourselves up to email enumeration attacks. How can we do this in the constraints
+		// of the XRPC API?
 		s.badRequest(w, fmt.Errorf("invalid create account json"))
 		return
 	}
@@ -77,17 +79,31 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	rotationKey, err := atcrypto.GeneratePrivateKeyK256()
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to create rotation key: %w", err))
+		return
+	}
+
+	// create a new did and submit the genesis operation to PLC
+	did, plcOp, err := s.plc.CreateDID(ctx, signingKey, rotationKey, "", in.Handle)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to create did: %w", err))
+		return
+	}
+	if err := s.plc.SendOperation(ctx, did, plcOp); err != nil {
+		s.internalErr(w, fmt.Errorf("failed to submit plc operation: %w", err))
+		return
+	}
+
 	pwHash, err := bcrypt.GenerateFromPassword([]byte(*in.Password), bcrypt.DefaultCost)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to hash password: %w", err))
 		return
 	}
 
-	// submit the genesis operation to PLC
-	// @TODO (jrc)
-
 	actor := &types.Actor{
-		Did:                   util.RandString(12), // @FIXME (jrc)
+		Did:                   did,
 		CreatedAt:             timestamppb.Now(),
 		Email:                 *in.Email,
 		EmailVerificationCode: fmt.Sprintf("%s-%s", util.RandString(6), util.RandString(6)),
@@ -96,18 +112,19 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		SigningKey:            signingKey.Bytes(),
 		Handle:                in.Handle,
 		Active:                true,
+		RotationKeys:          [][]byte{rotationKey.Bytes()},
 	}
 
-	if err := s.db.SaveActor(r.Context(), actor); err != nil {
+	if err := s.db.SaveActor(ctx, actor); err != nil {
 		s.internalErr(w, fmt.Errorf("failed to write actor to database: %w", err))
 		return
 	}
 
 	res := atproto.ServerCreateAccount_Output{
-		AccessJwt: "", // @TODO (jrc)
-		Did:       actor.Did,
-		DidDoc:    nil, // @TODO (jrc)
-		Handle:    actor.Handle,
+		Did:        actor.Did,
+		Handle:     actor.Handle,
+		AccessJwt:  "", // @TODO (jrc)
+		RefreshJwt: "", // @TODO (jrc)
 	}
 
 	s.jsonOK(w, res)
@@ -121,6 +138,11 @@ func validateCreateAccountInput(in *atproto.ServerCreateAccount_Input) error {
 		return fmt.Errorf("handle is required")
 	case in.Password == nil || *in.Password == "":
 		return fmt.Errorf("password is required")
+	}
+
+	const passLen = 12
+	if len(*in.Password) < passLen {
+		return fmt.Errorf("password must be at least %d characters", passLen)
 	}
 
 	return nil

@@ -46,7 +46,7 @@ var (
 				MetricsAddr:  c.String("metrics-addr"),
 				ReadTimeout:  c.Duration("read-timeout"),
 				WriteTimeout: c.Duration("write-timeout"),
-				PLCAddr:      c.String("plc"),
+				PLCURL:       c.String("plc"),
 				FDB: foundation.Config{
 					ClusterFile: c.String("fdb-cluster-file"),
 					APIVersion:  c.Int("fdb-api-version"),

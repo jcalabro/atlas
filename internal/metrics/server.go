@@ -42,9 +42,13 @@ func RunServer(ctx context.Context, cancel context.CancelFunc, addr string) {
 
 	go func() {
 		<-ctx.Done()
+
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = srv.Shutdown(shutdownCtx)
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			slog.Error("failed to shut down metrics server", "err", err)
+		}
 	}()
 
 	slog.Info("metrics server listening", "addr", srv.Addr)
