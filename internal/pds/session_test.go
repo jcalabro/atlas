@@ -714,3 +714,413 @@ func TestHandleCreateSession(t *testing.T) {
 		require.Equal(t, "deactivated", resp["status"])
 	})
 }
+
+func TestHandleGetSession(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
+
+	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            did,
+			Email:          email,
+			Handle:         handle,
+			PasswordHash:   pwHash,
+			EmailConfirmed: true,
+			CreatedAt:      timestamppb.Now(),
+			Active:         true,
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens:  []*types.RefreshToken{},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		return actor, session
+	}
+
+	t.Run("returns session info with valid access token", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:getsession1", "get1@example.com", "get1.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, resp["did"])
+		require.Equal(t, actor.Handle, resp["handle"])
+		require.Equal(t, actor.Email, resp["email"])
+		require.Equal(t, true, resp["emailConfirmed"])
+		require.Equal(t, true, resp["active"])
+	})
+
+	t.Run("returns deactivated status for inactive account", func(t *testing.T) {
+		t.Parallel()
+
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            "did:plc:getsession2",
+			Email:          "get2@example.com",
+			Handle:         "get2.dev.atlaspds.net",
+			PasswordHash:   pwHash,
+			EmailConfirmed: false,
+			CreatedAt:      timestamppb.Now(),
+			Active:         false,
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens:  []*types.RefreshToken{},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err = json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		require.Equal(t, false, resp["active"])
+		require.Equal(t, "deactivated", resp["status"])
+	})
+
+	t.Run("rejects request without authorization header", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects request with invalid token", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer invalid.token.here")
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects refresh token for getSession", func(t *testing.T) {
+		t.Parallel()
+
+		_, session := setupTestActor("did:plc:getsession3", "get3@example.com", "get3.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestHandleRefreshSession(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
+
+	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            did,
+			Email:          email,
+			Handle:         handle,
+			PasswordHash:   pwHash,
+			EmailConfirmed: true,
+			CreatedAt:      timestamppb.Now(),
+			Active:         true,
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens:  []*types.RefreshToken{},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		return actor, session
+	}
+
+	t.Run("refreshes session with valid refresh token", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:refresh1", "refresh1@example.com", "refresh1.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+
+		require.NotEmpty(t, resp["accessJwt"])
+		require.NotEmpty(t, resp["refreshJwt"])
+		require.Equal(t, actor.Did, resp["did"])
+		require.Equal(t, actor.Handle, resp["handle"])
+		require.Equal(t, true, resp["active"])
+
+		// verify old tokens are different from new tokens
+		require.NotEqual(t, session.AccessToken, resp["accessJwt"])
+		require.NotEqual(t, session.RefreshToken, resp["refreshJwt"])
+
+		// verify old refresh token was removed
+		updatedActor, err := srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+		for _, rt := range updatedActor.RefreshTokens {
+			require.NotEqual(t, session.RefreshToken, rt.Token)
+		}
+	})
+
+	t.Run("rejects access token for refreshSession", func(t *testing.T) {
+		t.Parallel()
+
+		_, session := setupTestActor("did:plc:refresh2", "refresh2@example.com", "refresh2.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects request without authorization header", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects expired refresh token", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+		expiredTime := now.Add(-8 * 24 * time.Hour)
+
+		refreshClaims := jwt.MapClaims{
+			"scope": "com.atproto.refresh",
+			"aud":   srv.cfg.serviceDID,
+			"sub":   "did:plc:refresh3",
+			"iat":   expiredTime.UTC().Unix(),
+			"exp":   expiredTime.UTC().Unix(),
+			"jti":   "test-jti-123",
+		}
+
+		refreshToken := jwt.NewWithClaims(jwt.SigningMethodES256, refreshClaims)
+		refreshString, err := refreshToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req.Header.Set("Authorization", "Bearer "+refreshString)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestHandleDeleteSession(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
+
+	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            did,
+			Email:          email,
+			Handle:         handle,
+			PasswordHash:   pwHash,
+			EmailConfirmed: true,
+			CreatedAt:      timestamppb.Now(),
+			Active:         true,
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens:  []*types.RefreshToken{},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		return actor, session
+	}
+
+	t.Run("deletes session with valid access token", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:delete1", "delete1@example.com", "delete1.dev.atlaspds.net")
+
+		// verify refresh token exists before deletion
+		beforeActor, err := srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+		require.Len(t, beforeActor.RefreshTokens, 1)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// verify refresh token was removed
+		afterActor, err := srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+		require.Len(t, afterActor.RefreshTokens, 0)
+	})
+
+	t.Run("preserves other sessions when deleting one", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session1 := setupTestActor("did:plc:delete2", "delete2@example.com", "delete2.dev.atlaspds.net")
+
+		// create a second session
+		updatedActor, err := srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+		session2, err := srv.createSession(ctx, updatedActor)
+		require.NoError(t, err)
+
+		// verify two refresh tokens exist
+		beforeActor, err := srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+		require.Len(t, beforeActor.RefreshTokens, 2)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session1.AccessToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// verify only the first session's refresh token was removed
+		afterActor, err := srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+		require.Len(t, afterActor.RefreshTokens, 1)
+		require.Equal(t, session2.RefreshToken, afterActor.RefreshTokens[0].Token)
+	})
+
+	t.Run("rejects request without authorization header", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects refresh token for deleteSession", func(t *testing.T) {
+		t.Parallel()
+
+		_, session := setupTestActor("did:plc:delete3", "delete3@example.com", "delete3.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects invalid token", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
+		req.Header.Set("Authorization", "Bearer invalid.token.here")
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}

@@ -290,14 +290,20 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.handleOauthAuthorizationServer)
 
 	//
-	// Public routes
+	// XRPC routes
 	//
 
+	// unauthed
 	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
 	mux.HandleFunc("GET /xrpc/com.atproto.server.describeServer", s.handleDescribeServer)
 	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createSession", s.handleCreateSession)
+
+	// authed
+	mux.HandleFunc("GET /xrpc/com.atproto.server.getSession", s.authMiddleware(s.handleGetSession))
+	mux.HandleFunc("POST /xrpc/com.atproto.server.refreshSession", s.authMiddleware(s.handleRefreshSession))
+	mux.HandleFunc("POST /xrpc/com.atproto.server.deleteSession", s.authMiddleware(s.handleDeleteSession))
 
 	return mux
 }

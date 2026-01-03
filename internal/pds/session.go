@@ -232,3 +232,130 @@ func (s *server) verifyToken(ctx context.Context, tokenString string, expectedSc
 		Scope: scope,
 	}, nil
 }
+
+func (s *server) handleGetSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	actor := actorFromContext(ctx)
+	if actor == nil {
+		s.internalErr(w, fmt.Errorf("actor not found in context"))
+		return
+	}
+
+	var status *string
+	if !actor.Active {
+		deactivated := "deactivated"
+		status = &deactivated
+	}
+
+	resp := &atproto.ServerGetSession_Output{
+		Handle:          actor.Handle,
+		Did:             actor.Did,
+		Email:           &actor.Email,
+		EmailConfirmed:  &actor.EmailConfirmed,
+		EmailAuthFactor: new(bool), // not implemented
+		Active:          &actor.Active,
+		Status:          status,
+	}
+
+	s.jsonOK(w, resp)
+}
+
+func (s *server) handleRefreshSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	actor := actorFromContext(ctx)
+	if actor == nil {
+		s.internalErr(w, fmt.Errorf("actor not found in context"))
+		return
+	}
+
+	refreshToken := tokenFromContext(ctx)
+	if refreshToken == "" {
+		s.internalErr(w, fmt.Errorf("refresh token not found in context"))
+		return
+	}
+
+	// remove the old refresh token from the actor's list
+	newRefreshTokens := make([]*types.RefreshToken, 0, len(actor.RefreshTokens))
+	for _, rt := range actor.RefreshTokens {
+		if rt.Token != refreshToken {
+			newRefreshTokens = append(newRefreshTokens, rt)
+		}
+	}
+	actor.RefreshTokens = newRefreshTokens
+
+	// create a new session
+	session, err := s.createSession(ctx, actor)
+	if err != nil {
+		s.log.Error("failed to create new session for refresh", "did", actor.Did, "error", err)
+		s.internalErr(w, fmt.Errorf("failed to create session"))
+		return
+	}
+
+	var status *string
+	if !actor.Active {
+		deactivated := "deactivated"
+		status = &deactivated
+	}
+
+	resp := &atproto.ServerRefreshSession_Output{
+		AccessJwt:  session.AccessToken,
+		RefreshJwt: session.RefreshToken,
+		Handle:     actor.Handle,
+		Did:        actor.Did,
+		Active:     &actor.Active,
+		Status:     status,
+	}
+
+	s.jsonOK(w, resp)
+}
+
+func (s *server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	actor := actorFromContext(ctx)
+	if actor == nil {
+		s.internalErr(w, fmt.Errorf("actor not found in context"))
+		return
+	}
+
+	accessToken := tokenFromContext(ctx)
+	if accessToken == "" {
+		s.internalErr(w, fmt.Errorf("access token not found in context"))
+		return
+	}
+
+	// verify and extract the refresh token JTI from the access token
+	claims, err := s.verifyAccessToken(ctx, accessToken)
+	if err != nil {
+		s.log.Error("failed to verify access token", "error", err)
+		s.internalErr(w, fmt.Errorf("failed to verify token"))
+		return
+	}
+
+	// remove the refresh token that matches this JTI
+	newRefreshTokens := make([]*types.RefreshToken, 0, len(actor.RefreshTokens))
+	for _, rt := range actor.RefreshTokens {
+		// parse the refresh token to get its JTI
+		rtClaims, err := s.verifyRefreshToken(ctx, rt.Token)
+		if err != nil {
+			// skip invalid tokens
+			continue
+		}
+		// keep tokens that don't match the JTI
+		if rtClaims.JTI != claims.JTI {
+			newRefreshTokens = append(newRefreshTokens, rt)
+		}
+	}
+	actor.RefreshTokens = newRefreshTokens
+
+	// save the updated actor
+	if err := s.db.SaveActor(ctx, actor); err != nil {
+		s.log.Error("failed to save actor after deleting session", "did", actor.Did, "error", err)
+		s.internalErr(w, fmt.Errorf("failed to delete session"))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
