@@ -155,13 +155,13 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			s.err(w, http.StatusUnauthorized, fmt.Errorf("missing authorization header"))
+			s.unauthorized(w, fmt.Errorf("authorization header is required"))
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			s.err(w, http.StatusUnauthorized, fmt.Errorf("invalid authorization header format"))
+			s.unauthorized(w, fmt.Errorf("invalid authorization header format"))
 			return
 		}
 
@@ -177,7 +177,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if err != nil {
 			s.log.Debug("token verification failed", "error", err, "is_refresh", isRefresh)
-			s.err(w, http.StatusUnauthorized, fmt.Errorf("invalid or expired token"))
+			s.unauthorized(w, fmt.Errorf("invalid or expired token"))
 			return
 		}
 
@@ -188,7 +188,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 		if actor == nil {
-			s.err(w, http.StatusUnauthorized, fmt.Errorf("actor not found"))
+			s.unauthorized(w, fmt.Errorf("actor not found"))
 			return
 		}
 
@@ -196,7 +196,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		host := hostFromContext(ctx)
 		if actor.PdsHost != host.hostname {
 			s.log.Debug("actor pds_host mismatch", "actor_host", actor.PdsHost, "request_host", host.hostname)
-			s.err(w, http.StatusUnauthorized, fmt.Errorf("actor not found on this host"))
+			s.unauthorized(w, fmt.Errorf("actor not found on this host"))
 			return
 		}
 
@@ -207,7 +207,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				if rt.Token == tokenString {
 					// check if expired
 					if rt.ExpiresAt.AsTime().Before(time.Now()) {
-						s.err(w, http.StatusUnauthorized, fmt.Errorf("refresh token expired"))
+						s.unauthorized(w, fmt.Errorf("refresh token expired"))
 						return
 					}
 
@@ -216,7 +216,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				}
 			}
 			if !found {
-				s.err(w, http.StatusUnauthorized, fmt.Errorf("refresh token not found"))
+				s.unauthorized(w, fmt.Errorf("refresh token not found"))
 				return
 			}
 		}

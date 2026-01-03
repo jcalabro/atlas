@@ -213,6 +213,10 @@ func (s *server) internalErr(w http.ResponseWriter, err error) {
 	s.err(w, http.StatusInternalServerError, err)
 }
 
+func (s *server) unauthorized(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusUnauthorized, err)
+}
+
 func (s *server) err(w http.ResponseWriter, code int, err error) {
 	type response struct {
 		Err string `json:"msg"`

@@ -1299,7 +1299,7 @@ func TestAuthMiddleware(t *testing.T) {
 		var resp map[string]any
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "missing authorization header")
+		require.Contains(t, resp["msg"], "authorization header is required")
 	})
 
 	t.Run("rejects malformed authorization header", func(t *testing.T) {
