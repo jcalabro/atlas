@@ -41,6 +41,9 @@ type actors struct {
 
 	// Secondary index. Allows listing actors by PDS host
 	didsByHost directory.DirectorySubspace
+
+	// Stores the last TID integer value per repo (did) for monotonic generation
+	tidsByDID directory.DirectorySubspace
 }
 
 type records struct {
@@ -93,6 +96,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	db.actors.didsByHost, err = directory.CreateOrOpen(db.db, []string{"dids_by_host"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dids_by_host directory: %w", err)
+	}
+
+	db.actors.tidsByDID, err = directory.CreateOrOpen(db.db, []string{"tids_by_did"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create tids_last directory: %w", err)
 	}
 
 	db.records.records, err = directory.CreateOrOpen(db.db, []string{"records"}, nil)

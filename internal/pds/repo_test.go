@@ -273,7 +273,9 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		actor, session := setupTestActor("did:plc:createrecord2", "create2@example.com", "create2.dev.atlaspds.dev")
 
-		customRkey := nextTID().String() // use unique rkey to avoid collisions with previous test runs
+		customTID, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		customRkey := customTID.String() // use unique rkey to avoid collisions with previous test runs
 		input := map[string]any{
 			"repo":       actor.Did,
 			"collection": "app.bsky.feed.post",
@@ -307,7 +309,9 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		actor, session := setupTestActor("did:plc:createrecord3", "create3@example.com", "create3.dev.atlaspds.dev")
 
-		rkey := nextTID().String() // use unique rkey to avoid collisions with previous test runs
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String() // use unique rkey to avoid collisions with previous test runs
 		input := map[string]any{
 			"repo":       actor.Did,
 			"collection": "app.bsky.feed.like",
@@ -419,7 +423,9 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		actor, session := setupTestActor("did:plc:createrecord7", "create7@example.com", "create7.dev.atlaspds.dev")
 
-		rkey := nextTID().String() // use unique rkey to avoid collisions with previous test runs
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String() // use unique rkey to avoid collisions with previous test runs
 		input := map[string]any{
 			"repo":       actor.Did,
 			"collection": "app.bsky.feed.post",

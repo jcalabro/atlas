@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atdata"
@@ -60,21 +59,6 @@ func (s *server) handleListRepos(w http.ResponseWriter, r *http.Request) {
 		Cursor: nextCursorOrNil(next),
 		Repos:  repos,
 	})
-}
-
-// tidClock is a process-global TID clock for generating record keys.
-// Using clock ID 0 is fine for a single process; in a distributed system
-// you'd want different clock IDs per process.
-var (
-	tidClock     = syntax.NewTIDClock(0)
-	tidClockOnce sync.Once
-)
-
-func nextTID() syntax.TID {
-	tidClockOnce.Do(func() {
-		tidClock = syntax.NewTIDClock(0)
-	})
-	return tidClock.Next()
 }
 
 // computeCID computes a CID from CBOR bytes using SHA-256 and dag-cbor codec.
@@ -137,8 +121,13 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		}
 		rkey = *in.Rkey
 	} else {
-		// generate a TID-based rkey
-		rkey = nextTID().String()
+		// generate a TID-based rkey using distributed counter
+		tid, err := s.db.NextTID(ctx, actor.Did)
+		if err != nil {
+			s.internalErr(w, fmt.Errorf("failed to generate TID: %w", err))
+			return
+		}
+		rkey = tid.String()
 	}
 
 	// check if record already exists
