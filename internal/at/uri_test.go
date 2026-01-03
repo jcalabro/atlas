@@ -10,63 +10,63 @@ func TestParseURI(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		uri      string
-		wantRepo string
-		wantColl string
-		wantRkey string
-		wantErr  string
+		name         string
+		uri          string
+		expectedRepo string
+		expectedColl string
+		expectedRkey string
+		expectedErr  string
 	}{
 		{
-			name:     "valid URI with at:// prefix",
-			uri:      "at://did:plc:test123/app.bsky.feed.post/3jui7kd2xs22b",
-			wantRepo: "did:plc:test123",
-			wantColl: "app.bsky.feed.post",
-			wantRkey: "3jui7kd2xs22b",
+			name:         "valid URI with at:// prefix",
+			uri:          "at://did:plc:test123/app.bsky.feed.post/3jui7kd2xs22b",
+			expectedRepo: "did:plc:test123",
+			expectedColl: "app.bsky.feed.post",
+			expectedRkey: "3jui7kd2xs22b",
 		},
 		{
-			name:     "valid URI without prefix",
-			uri:      "did:plc:abc/app.bsky.graph.follow/xyz",
-			wantRepo: "did:plc:abc",
-			wantColl: "app.bsky.graph.follow",
-			wantRkey: "xyz",
+			name:         "valid URI without prefix",
+			uri:          "did:plc:abc/app.bsky.graph.follow/xyz",
+			expectedRepo: "did:plc:abc",
+			expectedColl: "app.bsky.graph.follow",
+			expectedRkey: "xyz",
 		},
 		{
-			name:     "valid URI with did:web",
-			uri:      "at://did:web:example.com/com.example.record/key123",
-			wantRepo: "did:web:example.com",
-			wantColl: "com.example.record",
-			wantRkey: "key123",
+			name:         "valid URI with did:web",
+			uri:          "at://did:web:example.com/com.example.record/key123",
+			expectedRepo: "did:web:example.com",
+			expectedColl: "com.example.record",
+			expectedRkey: "key123",
 		},
 		{
-			name:    "not enough parts - missing rkey",
-			uri:     "at://did:plc:test/app.bsky.feed.post",
-			wantErr: "not enough component parts",
+			name:        "not enough parts - missing rkey",
+			uri:         "at://did:plc:test/app.bsky.feed.post",
+			expectedErr: "not enough component parts",
 		},
 		{
-			name:    "not enough parts - only repo",
-			uri:     "at://did:plc:test",
-			wantErr: "not enough component parts",
+			name:        "not enough parts - only repo",
+			uri:         "at://did:plc:test",
+			expectedErr: "not enough component parts",
 		},
 		{
-			name:    "empty string",
-			uri:     "",
-			wantErr: "not enough component parts",
+			name:        "empty string",
+			uri:         "",
+			expectedErr: "not enough component parts",
 		},
 		{
-			name:    "empty repo",
-			uri:     "at:///app.bsky.feed.post/rkey",
-			wantErr: "repo must not be empty",
+			name:        "empty repo",
+			uri:         "at:///app.bsky.feed.post/rkey",
+			expectedErr: "repo must not be empty",
 		},
 		{
-			name:    "empty collection",
-			uri:     "at://did:plc:test//rkey",
-			wantErr: "collection must not be empty",
+			name:        "empty collection",
+			uri:         "at://did:plc:test//rkey",
+			expectedErr: "collection must not be empty",
 		},
 		{
-			name:    "empty rkey",
-			uri:     "at://did:plc:test/app.bsky.feed.post/",
-			wantErr: "rkey must not be empty",
+			name:        "empty rkey",
+			uri:         "at://did:plc:test/app.bsky.feed.post/",
+			expectedErr: "rkey must not be empty",
 		},
 	}
 
@@ -76,18 +76,18 @@ func TestParseURI(t *testing.T) {
 
 			uri, err := ParseURI(tt.uri)
 
-			if tt.wantErr != "" {
+			if tt.expectedErr != "" {
 				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.wantErr)
+				require.Contains(t, err.Error(), tt.expectedErr)
 				require.Nil(t, uri)
 				return
 			}
 
 			require.NoError(t, err)
 			require.NotNil(t, uri)
-			require.Equal(t, tt.wantRepo, uri.Repo)
-			require.Equal(t, tt.wantColl, uri.Collection)
-			require.Equal(t, tt.wantRkey, uri.Rkey)
+			require.Equal(t, tt.expectedRepo, uri.Repo)
+			require.Equal(t, tt.expectedColl, uri.Collection)
+			require.Equal(t, tt.expectedRkey, uri.Rkey)
 		})
 	}
 }
@@ -96,9 +96,9 @@ func TestURI_String(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		uri  URI
-		want string
+		name     string
+		uri      URI
+		expected string
 	}{
 		{
 			name: "basic URI",
@@ -107,7 +107,7 @@ func TestURI_String(t *testing.T) {
 				Collection: "app.bsky.feed.post",
 				Rkey:       "3jui7kd2xs22b",
 			},
-			want: "at://did:plc:test123/app.bsky.feed.post/3jui7kd2xs22b",
+			expected: "at://did:plc:test123/app.bsky.feed.post/3jui7kd2xs22b",
 		},
 		{
 			name: "did:web repo",
@@ -116,14 +116,14 @@ func TestURI_String(t *testing.T) {
 				Collection: "com.example.record",
 				Rkey:       "key123",
 			},
-			want: "at://did:web:example.com/com.example.record/key123",
+			expected: "at://did:web:example.com/com.example.record/key123",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tt.want, tt.uri.String())
+			require.Equal(t, tt.expected, tt.uri.String())
 		})
 	}
 }
