@@ -24,8 +24,10 @@ func TestSaveActor(t *testing.T) {
 			EmailConfirmed:        false,
 			PasswordHash:          []byte("hashed_password"),
 			SigningKey:            []byte("signing_key"),
-			Handle:                "test.bsky.social",
+			Handle:                "test.dev.atlaspds.net",
 			Active:                true,
+			RotationKeys:          [][]byte{[]byte("rotation_key")},
+			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -41,8 +43,10 @@ func TestSaveActor(t *testing.T) {
 			EmailConfirmed:        false,
 			PasswordHash:          []byte("password1"),
 			SigningKey:            []byte("key1"),
-			Handle:                "user1.bsky.social",
+			Handle:                "user1.dev.atlaspds.net",
 			Active:                true,
+			RotationKeys:          [][]byte{[]byte("rotation_key")},
+			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -51,7 +55,7 @@ func TestSaveActor(t *testing.T) {
 		// Update the actor
 		actor.EmailConfirmed = true
 		actor.EmailVerificationCode = ""
-		actor.Handle = "updated.bsky.social"
+		actor.Handle = "updated.dev.atlaspds.net"
 
 		err = db.SaveActor(ctx, actor)
 		require.NoError(t, err)
@@ -61,13 +65,19 @@ func TestSaveActor(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, true, retrieved.EmailConfirmed)
 		require.Equal(t, "", retrieved.EmailVerificationCode)
-		require.Equal(t, "updated.bsky.social", retrieved.Handle)
+		require.Equal(t, "updated.dev.atlaspds.net", retrieved.Handle)
 	})
 
 	t.Run("handles actor with minimal fields", func(t *testing.T) {
 		actor := &types.Actor{
-			Did:   "did:plc:minimal",
-			Email: "minimal@example.com",
+			Did:           "did:plc:minimal",
+			Email:         "minimal@example.com",
+			Handle:        "minimal.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash"),
+			SigningKey:    []byte("key"),
+			RotationKeys:  [][]byte{[]byte("rotation")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -90,8 +100,10 @@ func TestGetActorByEmail(t *testing.T) {
 			EmailConfirmed:        true,
 			PasswordHash:          []byte("secure_hash"),
 			SigningKey:            []byte("signing_key_bytes"),
-			Handle:                "retrieve.bsky.social",
+			Handle:                "retrieve.dev.atlaspds.net",
 			Active:                true,
+			RotationKeys:          [][]byte{[]byte("rotation_key")},
+			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -120,19 +132,34 @@ func TestGetActorByEmail(t *testing.T) {
 
 	t.Run("retrieves correct actor when multiple exist", func(t *testing.T) {
 		actor1 := &types.Actor{
-			Did:    "did:plc:multi1",
-			Email:  "user1@example.com",
-			Handle: "user1.bsky.social",
+			Did:           "did:plc:multi1",
+			Email:         "user1@example.com",
+			Handle:        "user1.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash1"),
+			SigningKey:    []byte("key1"),
+			RotationKeys:  [][]byte{[]byte("rotation1")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 		actor2 := &types.Actor{
-			Did:    "did:plc:multi2",
-			Email:  "user2@example.com",
-			Handle: "user2.bsky.social",
+			Did:           "did:plc:multi2",
+			Email:         "user2@example.com",
+			Handle:        "user2.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash2"),
+			SigningKey:    []byte("key2"),
+			RotationKeys:  [][]byte{[]byte("rotation2")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 		actor3 := &types.Actor{
-			Did:    "did:plc:multi3",
-			Email:  "user3@example.com",
-			Handle: "user3.bsky.social",
+			Did:           "did:plc:multi3",
+			Email:         "user3@example.com",
+			Handle:        "user3.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash3"),
+			SigningKey:    []byte("key3"),
+			RotationKeys:  [][]byte{[]byte("rotation3")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 
 		err := db.SaveActor(ctx, actor1)
@@ -145,7 +172,7 @@ func TestGetActorByEmail(t *testing.T) {
 		retrieved, err := db.GetActorByEmail(ctx, "user2@example.com")
 		require.NoError(t, err)
 		require.Equal(t, "did:plc:multi2", retrieved.Did)
-		require.Equal(t, "user2.bsky.social", retrieved.Handle)
+		require.Equal(t, "user2.dev.atlaspds.net", retrieved.Handle)
 	})
 }
 
@@ -164,8 +191,10 @@ func TestGetActorByDID(t *testing.T) {
 			EmailConfirmed:        true,
 			PasswordHash:          []byte("hash123"),
 			SigningKey:            []byte("key123"),
-			Handle:                "testdid.bsky.social",
+			Handle:                "testdid.dev.atlaspds.net",
 			Active:                true,
+			RotationKeys:          [][]byte{[]byte("rotation_key")},
+			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -194,19 +223,34 @@ func TestGetActorByDID(t *testing.T) {
 
 	t.Run("retrieves correct actor when multiple exist", func(t *testing.T) {
 		actor1 := &types.Actor{
-			Did:    "did:plc:multidid1",
-			Email:  "multidid1@example.com",
-			Handle: "multidid1.bsky.social",
+			Did:           "did:plc:multidid1",
+			Email:         "multidid1@example.com",
+			Handle:        "multidid1.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash1"),
+			SigningKey:    []byte("key1"),
+			RotationKeys:  [][]byte{[]byte("rotation1")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 		actor2 := &types.Actor{
-			Did:    "did:plc:multidid2",
-			Email:  "multidid2@example.com",
-			Handle: "multidid2.bsky.social",
+			Did:           "did:plc:multidid2",
+			Email:         "multidid2@example.com",
+			Handle:        "multidid2.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash2"),
+			SigningKey:    []byte("key2"),
+			RotationKeys:  [][]byte{[]byte("rotation2")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 		actor3 := &types.Actor{
-			Did:    "did:plc:multidid3",
-			Email:  "multidid3@example.com",
-			Handle: "multidid3.bsky.social",
+			Did:           "did:plc:multidid3",
+			Email:         "multidid3@example.com",
+			Handle:        "multidid3.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash3"),
+			SigningKey:    []byte("key3"),
+			RotationKeys:  [][]byte{[]byte("rotation3")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 
 		err := db.SaveActor(ctx, actor1)
@@ -220,7 +264,7 @@ func TestGetActorByDID(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "did:plc:multidid2", retrieved.Did)
 		require.Equal(t, "multidid2@example.com", retrieved.Email)
-		require.Equal(t, "multidid2.bsky.social", retrieved.Handle)
+		require.Equal(t, "multidid2.dev.atlaspds.net", retrieved.Handle)
 	})
 }
 
@@ -239,14 +283,16 @@ func TestGetActorByHandle(t *testing.T) {
 			EmailConfirmed:        true,
 			PasswordHash:          []byte("hash456"),
 			SigningKey:            []byte("key456"),
-			Handle:                "handletest.bsky.social",
+			Handle:                "handletest.dev.atlaspds.net",
 			Active:                true,
+			RotationKeys:          [][]byte{[]byte("rotation_key")},
+			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
 		}
 
 		err := db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		retrieved, err := db.GetActorByHandle(ctx, "handletest.bsky.social")
+		retrieved, err := db.GetActorByHandle(ctx, "handletest.dev.atlaspds.net")
 		require.NoError(t, err)
 		require.NotNil(t, retrieved)
 
@@ -262,26 +308,41 @@ func TestGetActorByHandle(t *testing.T) {
 	})
 
 	t.Run("returns nil for non-existent handle", func(t *testing.T) {
-		actor, err := db.GetActorByHandle(ctx, "nonexistent.bsky.social")
+		actor, err := db.GetActorByHandle(ctx, "nonexistent.dev.atlaspds.net")
 		require.NoError(t, err)
 		require.Nil(t, actor)
 	})
 
 	t.Run("retrieves correct actor when multiple exist", func(t *testing.T) {
 		actor1 := &types.Actor{
-			Did:    "did:plc:multihandle1",
-			Email:  "multihandle1@example.com",
-			Handle: "multihandle1.bsky.social",
+			Did:           "did:plc:multihandle1",
+			Email:         "multihandle1@example.com",
+			Handle:        "multihandle1.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash1"),
+			SigningKey:    []byte("key1"),
+			RotationKeys:  [][]byte{[]byte("rotation1")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 		actor2 := &types.Actor{
-			Did:    "did:plc:multihandle2",
-			Email:  "multihandle2@example.com",
-			Handle: "multihandle2.bsky.social",
+			Did:           "did:plc:multihandle2",
+			Email:         "multihandle2@example.com",
+			Handle:        "multihandle2.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash2"),
+			SigningKey:    []byte("key2"),
+			RotationKeys:  [][]byte{[]byte("rotation2")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 		actor3 := &types.Actor{
-			Did:    "did:plc:multihandle3",
-			Email:  "multihandle3@example.com",
-			Handle: "multihandle3.bsky.social",
+			Did:           "did:plc:multihandle3",
+			Email:         "multihandle3@example.com",
+			Handle:        "multihandle3.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash3"),
+			SigningKey:    []byte("key3"),
+			RotationKeys:  [][]byte{[]byte("rotation3")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 
 		err := db.SaveActor(ctx, actor1)
@@ -291,47 +352,52 @@ func TestGetActorByHandle(t *testing.T) {
 		err = db.SaveActor(ctx, actor3)
 		require.NoError(t, err)
 
-		retrieved, err := db.GetActorByHandle(ctx, "multihandle2.bsky.social")
+		retrieved, err := db.GetActorByHandle(ctx, "multihandle2.dev.atlaspds.net")
 		require.NoError(t, err)
 		require.Equal(t, "did:plc:multihandle2", retrieved.Did)
 		require.Equal(t, "multihandle2@example.com", retrieved.Email)
-		require.Equal(t, "multihandle2.bsky.social", retrieved.Handle)
+		require.Equal(t, "multihandle2.dev.atlaspds.net", retrieved.Handle)
 	})
 
 	t.Run("handle lookup is updated when actor handle changes", func(t *testing.T) {
 		actor := &types.Actor{
-			Did:    "did:plc:changehandle",
-			Email:  "changehandle@example.com",
-			Handle: "original.bsky.social",
+			Did:           "did:plc:changehandle",
+			Email:         "changehandle@example.com",
+			Handle:        "original.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash"),
+			SigningKey:    []byte("key"),
+			RotationKeys:  [][]byte{[]byte("rotation")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 
 		err := db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
 		// Verify we can retrieve by original handle
-		retrieved, err := db.GetActorByHandle(ctx, "original.bsky.social")
+		retrieved, err := db.GetActorByHandle(ctx, "original.dev.atlaspds.net")
 		require.NoError(t, err)
 		require.Equal(t, "did:plc:changehandle", retrieved.Did)
 
 		// Update the handle
-		actor.Handle = "updated.bsky.social"
+		actor.Handle = "updated.dev.atlaspds.net"
 		err = db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
 		// Verify we can retrieve by new handle
-		retrieved, err = db.GetActorByHandle(ctx, "updated.bsky.social")
+		retrieved, err = db.GetActorByHandle(ctx, "updated.dev.atlaspds.net")
 		require.NoError(t, err)
 		require.Equal(t, "did:plc:changehandle", retrieved.Did)
-		require.Equal(t, "updated.bsky.social", retrieved.Handle)
+		require.Equal(t, "updated.dev.atlaspds.net", retrieved.Handle)
 
 		// Old handle should still point to the same DID (stale index)
 		// This is expected behavior with the current implementation
-		retrieved, err = db.GetActorByHandle(ctx, "original.bsky.social")
+		retrieved, err = db.GetActorByHandle(ctx, "original.dev.atlaspds.net")
 		require.NoError(t, err)
 		require.NotNil(t, retrieved)
 		require.Equal(t, "did:plc:changehandle", retrieved.Did)
 		// But the actor's current handle should be the updated one
-		require.Equal(t, "updated.bsky.social", retrieved.Handle)
+		require.Equal(t, "updated.dev.atlaspds.net", retrieved.Handle)
 	})
 }
 
@@ -342,9 +408,14 @@ func TestActorIndexConsistency(t *testing.T) {
 
 	t.Run("all three lookups return the same actor", func(t *testing.T) {
 		actor := &types.Actor{
-			Did:    "did:plc:consistency123",
-			Email:  "consistency@example.com",
-			Handle: "consistency.bsky.social",
+			Did:           "did:plc:consistency123",
+			Email:         "consistency@example.com",
+			Handle:        "consistency.dev.atlaspds.net",
+			CreatedAt:     timestamppb.New(time.Now()),
+			PasswordHash:  []byte("hash"),
+			SigningKey:    []byte("key"),
+			RotationKeys:  [][]byte{[]byte("rotation")},
+			RefreshTokens: []*types.RefreshToken{},
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -358,7 +429,7 @@ func TestActorIndexConsistency(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, byEmail)
 
-		byHandle, err := db.GetActorByHandle(ctx, "consistency.bsky.social")
+		byHandle, err := db.GetActorByHandle(ctx, "consistency.dev.atlaspds.net")
 		require.NoError(t, err)
 		require.NotNil(t, byHandle)
 

@@ -113,6 +113,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		Handle:                in.Handle,
 		Active:                true,
 		RotationKeys:          [][]byte{rotationKey.Bytes()},
+		RefreshTokens:         []*types.RefreshToken{},
 	}
 
 	if err := s.db.SaveActor(ctx, actor); err != nil {

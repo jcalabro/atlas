@@ -147,3 +147,13 @@ func pack(dir directory.DirectorySubspace, keys ...tuple.TupleElement) fdb.Key {
 	}
 	return dir.Pack(tup)
 }
+
+func atLeastOneByteSlice(bufs [][]byte) bool {
+	for _, buf := range bufs {
+		if len(buf) > 0 {
+			return true
+		}
+	}
+
+	return false // all byte slices are empty (or len zero)
+}

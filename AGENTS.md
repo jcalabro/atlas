@@ -59,6 +59,7 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
 - We don't add too many comments, especially in the middle of functions. However, we always document user-facing APIs with godoc style comments (i.e. public types we expect others to import)
 - Comments that occur in the middle of functions should be `// lower case` unless they `// Are mutliple sentences. Like this.`
 - Always use `any` instead of `interface{}`. There is a linter rule to validate this.
+- Never use `*.bsky.social` domains/handles. Instead, use `*.dev.atlaspds.net`.
 
 ## Development Setup
 

@@ -34,15 +34,17 @@ func TestCreateSession(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser123",
 			Email:         "test@example.com",
-			Handle:        "test.bsky.social",
+			Handle:        "test.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -84,15 +86,17 @@ func TestCreateSession(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser456",
 			Email:         "test2@example.com",
-			Handle:        "test2.bsky.social",
+			Handle:        "test2.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -115,15 +119,17 @@ func TestCreateSession(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser789",
 			Email:         "test3@example.com",
-			Handle:        "test3.bsky.social",
+			Handle:        "test3.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session1, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -149,15 +155,17 @@ func TestCreateSession(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser101112",
 			Email:         "test4@example.com",
-			Handle:        "test4.bsky.social",
+			Handle:        "test4.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -182,15 +190,17 @@ func TestCreateSession(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser131415",
 			Email:         "test5@example.com",
-			Handle:        "test5.bsky.social",
+			Handle:        "test5.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -229,15 +239,17 @@ func TestVerifyAccessToken(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser123",
 			Email:         "test@example.com",
-			Handle:        "test.bsky.social",
+			Handle:        "test.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -257,15 +269,17 @@ func TestVerifyAccessToken(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser456",
 			Email:         "test2@example.com",
-			Handle:        "test2.bsky.social",
+			Handle:        "test2.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -395,15 +409,17 @@ func TestVerifyRefreshToken(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser123",
 			Email:         "test@example.com",
-			Handle:        "test.bsky.social",
+			Handle:        "test.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -423,15 +439,17 @@ func TestVerifyRefreshToken(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser456",
 			Email:         "test2@example.com",
-			Handle:        "test2.bsky.social",
+			Handle:        "test2.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -471,15 +489,17 @@ func TestVerifyRefreshToken(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser101112",
 			Email:         "test3@example.com",
-			Handle:        "test3.bsky.social",
+			Handle:        "test3.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
+			PasswordHash:  []byte("password_hash"),
+			SigningKey:    []byte("signing_key"),
+			RotationKeys:  [][]byte{[]byte("rotation_key")},
 			RefreshTokens: []*types.RefreshToken{},
 		}
 
-		if err := srv.db.SaveActor(ctx, actor); err != nil {
-			t.Fatalf("failed to save actor: %v", err)
-		}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
 
 		session, err := srv.createSession(ctx, actor)
 		require.NoError(t, err)
@@ -518,7 +538,9 @@ func TestHandleCreateSession(t *testing.T) {
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
 			Active:         true,
-			RefreshTokens:  []*types.RefreshToken{},
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens:  []*types.RefreshToken{{Token: "initial_token"}},
 		}
 
 		err = srv.db.SaveActor(ctx, actor)
@@ -530,7 +552,7 @@ func TestHandleCreateSession(t *testing.T) {
 	t.Run("creates session with DID identifier", func(t *testing.T) {
 		t.Parallel()
 
-		actor := setupTestActor("did:plc:testuser1", "test1@example.com", "test1.bsky.social", "password123")
+		actor := setupTestActor("did:plc:testuser1", "test1@example.com", "test1.dev.atlaspds.net", "password123")
 
 		w := httptest.NewRecorder()
 		router := srv.router()
@@ -557,12 +579,12 @@ func TestHandleCreateSession(t *testing.T) {
 	t.Run("creates session with handle identifier", func(t *testing.T) {
 		t.Parallel()
 
-		actor := setupTestActor("did:plc:testuser2", "test2@example.com", "test2.bsky.social", "password456")
+		actor := setupTestActor("did:plc:testuser2", "test2@example.com", "test2.dev.atlaspds.net", "password456")
 
 		w := httptest.NewRecorder()
 		router := srv.router()
 
-		reqBody := `{"identifier":"test2.bsky.social","password":"password456"}`
+		reqBody := `{"identifier":"test2.dev.atlaspds.net","password":"password456"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
 		router.ServeHTTP(w, req)
 
@@ -579,7 +601,7 @@ func TestHandleCreateSession(t *testing.T) {
 	t.Run("creates session with email identifier", func(t *testing.T) {
 		t.Parallel()
 
-		actor := setupTestActor("did:plc:testuser3", "test3@example.com", "test3.bsky.social", "password789")
+		actor := setupTestActor("did:plc:testuser3", "test3@example.com", "test3.dev.atlaspds.net", "password789")
 
 		w := httptest.NewRecorder()
 		router := srv.router()
@@ -602,7 +624,7 @@ func TestHandleCreateSession(t *testing.T) {
 	t.Run("rejects invalid password", func(t *testing.T) {
 		t.Parallel()
 
-		setupTestActor("did:plc:testuser4", "test4@example.com", "test4.bsky.social", "correctpassword")
+		setupTestActor("did:plc:testuser4", "test4@example.com", "test4.dev.atlaspds.net", "correctpassword")
 
 		w := httptest.NewRecorder()
 		router := srv.router()
@@ -662,12 +684,14 @@ func TestHandleCreateSession(t *testing.T) {
 		actor := &types.Actor{
 			Did:            "did:plc:testuser5",
 			Email:          "test5@example.com",
-			Handle:         "test5.bsky.social",
+			Handle:         "test5.dev.atlaspds.net",
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
 			Active:         false, // inactive account
-			RefreshTokens:  []*types.RefreshToken{},
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens:  []*types.RefreshToken{{Token: "initial_token"}},
 		}
 
 		err = srv.db.SaveActor(ctx, actor)

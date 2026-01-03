@@ -9,9 +9,36 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+func ValidateActor(a *types.Actor) error {
+	switch {
+	case a == nil:
+		return fmt.Errorf("actor is nil")
+	case a.CreatedAt == nil:
+		return fmt.Errorf("created timestamp is required")
+	case a.Did == "":
+		return fmt.Errorf("did is required")
+	case a.Email == "":
+		return fmt.Errorf("email is required")
+	case a.Handle == "":
+		return fmt.Errorf("handle is required")
+	case len(a.PasswordHash) == 0:
+		return fmt.Errorf("password hash is required")
+	case len(a.SigningKey) == 0:
+		return fmt.Errorf("signing key is required")
+	case !atLeastOneByteSlice(a.RotationKeys):
+		return fmt.Errorf("at least one rotation key is required")
+	}
+
+	return nil
+}
+
 func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) error {
 	_, span := db.tracer.Start(ctx, "SaveActor")
 	defer span.End()
+
+	if err := ValidateActor(actor); err != nil {
+		return fmt.Errorf("invalid actor: %w", err)
+	}
 
 	buf, err := proto.Marshal(actor)
 	if err != nil {
