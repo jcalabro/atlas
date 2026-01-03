@@ -118,6 +118,15 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		PdsHost:               host.hostname,
 	}
 
+	// initialize the empty repo for this account
+	rootCID, rev, err := s.repoMgr.InitRepo(ctx, actor)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to initialize repo: %w", err))
+		return
+	}
+	actor.Head = rootCID.String()
+	actor.Rev = rev
+
 	if err := s.db.SaveActor(ctx, actor); err != nil {
 		s.internalErr(w, fmt.Errorf("failed to write actor to database: %w", err))
 		return

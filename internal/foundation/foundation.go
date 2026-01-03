@@ -27,6 +27,9 @@ type DB struct {
 
 	// Records stored in user repos
 	records records
+
+	// IPLD blocks for MST and record storage
+	blockDir blockDir
 }
 
 type actors struct {
@@ -49,6 +52,11 @@ type actors struct {
 type records struct {
 	// Primary index. Records are keyed by (did, collection, rkey)
 	records directory.DirectorySubspace
+}
+
+type blockDir struct {
+	// Primary index. Blocks are keyed by (did, cid)
+	blocks directory.DirectorySubspace
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -108,6 +116,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to create records directory: %w", err)
 	}
 
+	db.blockDir.blocks, err = directory.CreateOrOpen(db.db, []string{"blocks"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create blocks directory: %w", err)
+	}
+
 	return db, nil
 }
 
@@ -123,6 +136,18 @@ func (db *DB) Ping(ctx context.Context) error {
 	return err
 }
 
+// Transact runs the given function within a FDB transaction.
+// Use this for operations that need to atomically update multiple items.
+func (db *DB) Transact(fn func(tx fdb.Transaction) error) error {
+	_, err := transaction(db.db, func(tx fdb.Transaction) (any, error) {
+		if err := fn(tx); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+	return err
+}
+
 // Executes the anonymous function as a write transaction, then attempts to cast the return type
 func transaction[T any](db *fdb.Database, fn func(tx fdb.Transaction) (T, error)) (T, error) {
 	var t T
@@ -132,6 +157,11 @@ func transaction[T any](db *fdb.Database, fn func(tx fdb.Transaction) (T, error)
 	})
 	if err != nil {
 		return t, err
+	}
+
+	// handle nil result (common when function only has side effects)
+	if resI == nil {
+		return t, nil
 	}
 
 	res, ok := resI.(T)
@@ -151,6 +181,11 @@ func readTransaction[T any](db *fdb.Database, fn func(tx fdb.ReadTransaction) (T
 	})
 	if err != nil {
 		return t, err
+	}
+
+	// handle nil result
+	if resI == nil {
+		return t, nil
 	}
 
 	res, ok := resI.(T)

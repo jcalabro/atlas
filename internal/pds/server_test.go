@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/bluesky-social/indigo/atproto/atcrypto"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/plc"
@@ -63,20 +64,25 @@ func testServer(t *testing.T) *server {
 			},
 		},
 
-		db: testDB,
+		db:      testDB,
+		repoMgr: NewRepoManager(testDB),
 
 		directory: &dir,
 		plc:       &plc.MockClient{},
 	}
 }
 
-// helper to create an authenticated actor
+// helper to create an authenticated actor with an initialized repo
 func setupTestActor(t *testing.T, srv *server, did, email, handle string) (*types.Actor, *Session) {
 	t.Helper()
 
 	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
 
 	pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	// generate a proper K256 signing key for MST operations
+	signingKey, err := atcrypto.GeneratePrivateKeyK256()
 	require.NoError(t, err)
 
 	actor := &types.Actor{
@@ -86,11 +92,17 @@ func setupTestActor(t *testing.T, srv *server, did, email, handle string) (*type
 		PdsHost:       testPDSHost,
 		CreatedAt:     timestamppb.Now(),
 		PasswordHash:  pwHash,
-		SigningKey:    []byte("test-signing-key"),
-		RotationKeys:  [][]byte{[]byte("test-rotation-key")},
+		SigningKey:    signingKey.Bytes(),
+		RotationKeys:  [][]byte{signingKey.Bytes()},
 		RefreshTokens: []*types.RefreshToken{},
 		Active:        true,
 	}
+
+	// initialize the repo for this actor
+	rootCID, rev, err := srv.repoMgr.InitRepo(ctx, actor)
+	require.NoError(t, err)
+	actor.Head = rootCID.String()
+	actor.Rev = rev
 
 	err = srv.db.SaveActor(ctx, actor)
 	require.NoError(t, err)

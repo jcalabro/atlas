@@ -55,6 +55,18 @@ func (db *DB) SaveRecord(ctx context.Context, record *types.Record) error {
 		return fmt.Errorf("invalid record: %w", err)
 	}
 
+	_, err := transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
+		if err := db.SaveRecordTx(tx, record); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+
+	return err
+}
+
+// SaveRecordTx stores a record within an existing transaction.
+func (db *DB) SaveRecordTx(tx fdb.Transaction, record *types.Record) error {
 	buf, err := proto.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("failed to marshal record: %w", err)
@@ -65,12 +77,8 @@ func (db *DB) SaveRecord(ctx context.Context, record *types.Record) error {
 		&at.URI{Repo: record.Did, Collection: record.Collection, Rkey: record.Rkey},
 	)
 
-	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
-		tx.Set(recordKey, buf)
-		return nil, nil
-	})
-
-	return err
+	tx.Set(recordKey, buf)
+	return nil
 }
 
 // GetRecord retrieves a record by its AT URI
@@ -113,12 +121,16 @@ func (db *DB) DeleteRecord(ctx context.Context, uri string) error {
 		return fmt.Errorf("invalid AT URI: %w", err)
 	}
 
-	key := packURI(db.records.records, aturi)
-
 	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
-		tx.Clear(key)
+		db.DeleteRecordTx(tx, aturi)
 		return nil, nil
 	})
 
 	return err
+}
+
+// DeleteRecordTx clears a record within an existing transaction.
+func (db *DB) DeleteRecordTx(tx fdb.Transaction, uri *at.URI) {
+	key := packURI(db.records.records, uri)
+	tx.Clear(key)
 }

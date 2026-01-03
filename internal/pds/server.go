@@ -49,7 +49,8 @@ type server struct {
 
 	hosts map[string]*loadedHostConfig
 
-	db *foundation.DB
+	db      *foundation.DB
+	repoMgr *RepoManager
 
 	directory identity.Directory
 	plc       plc.PLC
@@ -98,7 +99,8 @@ func Run(ctx context.Context, args *Args) error {
 
 		hosts: hosts,
 
-		db: db,
+		db:      db,
+		repoMgr: NewRepoManager(db),
 
 		// @TODO (jrc): use foundation rather than caching in-memory
 		directory: identity.DefaultDirectory(),

@@ -16,46 +16,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestComputeCID(t *testing.T) {
-	t.Parallel()
-
-	t.Run("deterministic", func(t *testing.T) {
-		t.Parallel()
-		input := []byte(`{"$type":"app.bsky.feed.post","text":"hello"}`)
-
-		cid1, err := computeCID(input)
-		require.NoError(t, err)
-
-		cid2, err := computeCID(input)
-		require.NoError(t, err)
-
-		require.Equal(t, cid1, cid2)
-	})
-
-	t.Run("different inputs produce different CIDs", func(t *testing.T) {
-		t.Parallel()
-		cid1, err := computeCID([]byte(`{"text":"hello"}`))
-		require.NoError(t, err)
-
-		cid2, err := computeCID([]byte(`{"text":"world"}`))
-		require.NoError(t, err)
-
-		require.NotEqual(t, cid1, cid2)
-	})
-
-	t.Run("produces CIDv1 with dag-cbor codec", func(t *testing.T) {
-		t.Parallel()
-		c, err := computeCID([]byte(`{"test":"data"}`))
-		require.NoError(t, err)
-
-		require.Equal(t, uint64(1), c.Version())
-		require.Equal(t, uint64(0x71), c.Type()) // dag-cbor
-		require.True(t, c.Defined())
-		require.NotEmpty(t, c.String())
-		require.True(t, len(c.String()) > 10) // CIDs are reasonably long
-	})
-}
-
 func TestHandleListRepos(t *testing.T) {
 	t.Parallel()
 	srv := testServer(t)
@@ -949,5 +909,180 @@ func TestHandleDeleteRecord(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestConcurrentModificationDetection(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	t.Run("detects concurrent modification on createRecord", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:concurrent1", "concurrent1@example.com", "concurrent1.dev.atlaspds.dev")
+
+		// simulate another server modifying the repo by directly changing the actor's Head
+		originalHead := actor.Head
+		actor.Head = "bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee" // different CID
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		// restore the actor's Head in our local copy (simulating stale state)
+		actor.Head = originalHead
+
+		// try to create a record with the stale actor state
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       tid.String(),
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "This should fail due to concurrent modification",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+
+		// should fail with conflict due to concurrent modification
+		require.Equal(t, http.StatusConflict, w.Code)
+	})
+
+	t.Run("swapCommit rejects mismatched head", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:concurrent2", "concurrent2@example.com", "concurrent2.dev.atlaspds.dev")
+
+		// create first record to get a known commit CID
+		tid1, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		input1 := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       tid1.String(),
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "First record",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body1, err := json.Marshal(input1)
+		require.NoError(t, err)
+
+		w1 := httptest.NewRecorder()
+		req1 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body1))
+		req1 = addAuthContext(t, ctx, srv, req1, actor, session.AccessToken)
+		srv.handleCreateRecord(w1, req1)
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		var out1 atproto.RepoCreateRecord_Output
+		err = json.Unmarshal(w1.Body.Bytes(), &out1)
+		require.NoError(t, err)
+
+		// reload actor to get current head
+		actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// try to create another record with wrong swapCommit
+		tid2, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		wrongSwapCommit := "bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee"
+		input2 := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       tid2.String(),
+			"swapCommit": wrongSwapCommit,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "This should fail due to wrong swapCommit",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body2, err := json.Marshal(input2)
+		require.NoError(t, err)
+
+		w2 := httptest.NewRecorder()
+		req2 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body2))
+		req2 = addAuthContext(t, ctx, srv, req2, actor, session.AccessToken)
+		srv.handleCreateRecord(w2, req2)
+
+		// should fail with conflict due to swapCommit mismatch
+		require.Equal(t, http.StatusConflict, w2.Code)
+	})
+
+	t.Run("swapCommit accepts correct head", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:concurrent3", "concurrent3@example.com", "concurrent3.dev.atlaspds.dev")
+
+		// create first record
+		tid1, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		input1 := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       tid1.String(),
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "First record",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body1, err := json.Marshal(input1)
+		require.NoError(t, err)
+
+		w1 := httptest.NewRecorder()
+		req1 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body1))
+		req1 = addAuthContext(t, ctx, srv, req1, actor, session.AccessToken)
+		srv.handleCreateRecord(w1, req1)
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		var out1 atproto.RepoCreateRecord_Output
+		err = json.Unmarshal(w1.Body.Bytes(), &out1)
+		require.NoError(t, err)
+		require.NotNil(t, out1.Commit)
+		currentHead := out1.Commit.Cid
+
+		// reload actor to get current state
+		actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// create another record with correct swapCommit
+		tid2, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		input2 := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       tid2.String(),
+			"swapCommit": currentHead,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Second record with correct swapCommit",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body2, err := json.Marshal(input2)
+		require.NoError(t, err)
+
+		w2 := httptest.NewRecorder()
+		req2 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body2))
+		req2 = addAuthContext(t, ctx, srv, req2, actor, session.AccessToken)
+		srv.handleCreateRecord(w2, req2)
+
+		// should succeed
+		require.Equal(t, http.StatusOK, w2.Code)
 	})
 }

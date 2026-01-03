@@ -42,6 +42,18 @@ func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) error {
 		return fmt.Errorf("invalid actor: %w", err)
 	}
 
+	_, err := transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
+		if err := db.SaveActorTx(tx, actor); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
+
+	return err
+}
+
+// SaveActorTx saves an actor within an existing transaction.
+func (db *DB) SaveActorTx(tx fdb.Transaction, actor *types.Actor) error {
 	buf, err := proto.Marshal(actor)
 	if err != nil {
 		return fmt.Errorf("failed to protobuf marshal actor: %w", err)
@@ -52,15 +64,32 @@ func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) error {
 	didByEmailKey := pack(db.actors.didsByEmail, actor.PdsHost, actor.Email)
 	didByHostKey := pack(db.actors.didsByHost, actor.PdsHost, actor.Did)
 
-	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
-		tx.Set(actorKey, buf)
-		tx.Set(didByHandleKey, []byte(actor.Did))
-		tx.Set(didByEmailKey, []byte(actor.Did))
-		tx.Set(didByHostKey, []byte{})
-		return nil, nil
-	})
+	tx.Set(actorKey, buf)
+	tx.Set(didByHandleKey, []byte(actor.Did))
+	tx.Set(didByEmailKey, []byte(actor.Did))
+	tx.Set(didByHostKey, []byte{})
 
-	return err
+	return nil
+}
+
+// GetActorHeadTx reads just the actor's current Head within an existing transaction.
+// Returns empty string if actor not found.
+func (db *DB) GetActorHeadTx(tx fdb.Transaction, did string) (string, error) {
+	actorKey := pack(db.actors.actors, did)
+	buf, err := tx.Get(actorKey).Get()
+	if err != nil {
+		return "", err
+	}
+	if len(buf) == 0 {
+		return "", nil
+	}
+
+	var actor types.Actor
+	if err := proto.Unmarshal(buf, &actor); err != nil {
+		return "", err
+	}
+
+	return actor.Head, nil
 }
 
 func (db *DB) GetActorByDID(ctx context.Context, did string) (*types.Actor, error) {
