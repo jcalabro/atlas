@@ -178,7 +178,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	actor := actorFromContext(ctx)
 	if actor == nil {
-		s.unauthorized(w, fmt.Errorf("authentication required"))
+		s.internalErr(w, fmt.Errorf("actor not found in context"))
 		return
 	}
 
@@ -281,4 +281,86 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.jsonOK(w, resp)
+}
+
+func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	span := spanFromContext(ctx)
+	defer span.End()
+
+	actor := actorFromContext(ctx)
+	if actor == nil {
+		s.internalErr(w, fmt.Errorf("actor not found in context"))
+		return
+	}
+
+	var in atproto.RepoDeleteRecord_Input
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	switch {
+	case in.Repo == "":
+		s.badRequest(w, fmt.Errorf("repo is required"))
+		return
+	case in.Collection == "":
+		s.badRequest(w, fmt.Errorf("collection is required"))
+		return
+	case in.Rkey == "":
+		s.badRequest(w, fmt.Errorf("rkey is required"))
+		return
+	}
+
+	// verify the repo matches the authenticated user
+	if in.Repo != actor.Did && in.Repo != actor.Handle {
+		s.forbidden(w, fmt.Errorf("repo must match authenticated user"))
+		return
+	}
+
+	// verify the collection is a valid NSID
+	if _, err := syntax.ParseNSID(in.Collection); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid collection NSID: %w", err))
+		return
+	}
+
+	// verify the rkey is valid
+	if _, err := syntax.ParseRecordKey(in.Rkey); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid rkey: %w", err))
+		return
+	}
+
+	uri := at.FormatURI(actor.Did, in.Collection, in.Rkey)
+
+	// check if record exists
+	existing, err := s.db.GetRecord(ctx, uri)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to check existing record: %w", err))
+		return
+	}
+	if existing == nil {
+		s.notFound(w, fmt.Errorf("record not found"))
+		return
+	}
+
+	// if swapRecord is provided, verify the CID matches
+	if in.SwapRecord != nil {
+		if _, err := syntax.ParseCID(*in.SwapRecord); err != nil {
+			s.badRequest(w, fmt.Errorf("invalid swapRecord cid: %w", err))
+			return
+		}
+		if existing.Cid != *in.SwapRecord {
+			s.conflict(w, fmt.Errorf("record cid does not match swapRecord"))
+			return
+		}
+	}
+
+	// delete the record
+	if err := s.db.DeleteRecord(ctx, uri); err != nil {
+		s.internalErr(w, fmt.Errorf("failed to delete record: %w", err))
+		return
+	}
+
+	// @NOTE (jrc): we're not updating the repo commit yet - that will come with full MST support
+	s.jsonOK(w, struct{}{})
 }

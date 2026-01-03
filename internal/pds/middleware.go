@@ -176,7 +176,6 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			claims, err = s.verifyAccessToken(ctx, tokenString)
 		}
 		if err != nil {
-			s.log.Debug("token verification failed", "error", err, "is_refresh", isRefresh)
 			s.unauthorized(w, fmt.Errorf("invalid or expired token"))
 			return
 		}

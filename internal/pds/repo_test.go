@@ -451,6 +451,7 @@ func TestHandleCreateRecord(t *testing.T) {
 
 	t.Run("error - no auth", func(t *testing.T) {
 		t.Parallel()
+		router := srv.hostMiddleware(srv.router())
 
 		input := map[string]any{
 			"repo":       "did:plc:noauth",
@@ -466,8 +467,8 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req = addTestHostContext(srv, req)
-		srv.handleCreateRecord(w, req)
+		req.Host = testPDSHost
+		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
 	})
@@ -641,5 +642,312 @@ func TestHandleGetRecord(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}
+
+func TestHandleDeleteRecord(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	t.Run("success - deletes record", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord1", "deleterecord1@example.com", "deleterecord1.dev.atlaspds.dev")
+
+		// create a record first
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		createInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Post to be deleted",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		createBody, err := json.Marshal(createInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(createBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// verify record exists
+		uri := fmt.Sprintf("at://%s/app.bsky.feed.post/%s", actor.Did, rkey)
+		record, err := srv.db.GetRecord(ctx, uri)
+		require.NoError(t, err)
+		require.NotNil(t, record)
+
+		// delete the record
+		deleteInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleDeleteRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// verify record is deleted
+		record, err = srv.db.GetRecord(ctx, uri)
+		require.NoError(t, err)
+		require.Nil(t, record)
+	})
+
+	t.Run("success - deletes record with swapRecord", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord2", "deleterecord2@example.com", "deleterecord2.dev.atlaspds.dev")
+
+		// create a record first
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		createInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Post to be deleted with swap",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		createBody, err := json.Marshal(createInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(createBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var createOut atproto.RepoCreateRecord_Output
+		err = json.Unmarshal(w.Body.Bytes(), &createOut)
+		require.NoError(t, err)
+
+		// delete the record with swapRecord
+		deleteInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"swapRecord": createOut.Cid,
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleDeleteRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// verify record is deleted
+		uri := fmt.Sprintf("at://%s/app.bsky.feed.post/%s", actor.Did, rkey)
+		record, err := srv.db.GetRecord(ctx, uri)
+		require.NoError(t, err)
+		require.Nil(t, record)
+	})
+
+	t.Run("error - repo mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord3", "deleterecord3@example.com", "deleterecord3.dev.atlaspds.dev")
+
+		deleteInput := map[string]any{
+			"repo":       "did:plc:someoneelse",
+			"collection": "app.bsky.feed.post",
+			"rkey":       "abc123",
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleDeleteRecord(w, req)
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("error - record not found", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord4", "deleterecord4@example.com", "deleterecord4.dev.atlaspds.dev")
+
+		deleteInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       "3jui7kd2xxxx2",
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleDeleteRecord(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("error - swapRecord mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord5", "deleterecord5@example.com", "deleterecord5.dev.atlaspds.dev")
+
+		// create a record first
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		createInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Post with swap mismatch",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		createBody, err := json.Marshal(createInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(createBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// try to delete with wrong swapRecord
+		deleteInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"swapRecord": "bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee",
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleDeleteRecord(w, req)
+
+		require.Equal(t, http.StatusConflict, w.Code)
+	})
+
+	t.Run("error - invalid collection NSID", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord6", "deleterecord6@example.com", "deleterecord6.dev.atlaspds.dev")
+
+		deleteInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "not-valid",
+			"rkey":       "abc123",
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleDeleteRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid rkey", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord7", "deleterecord7@example.com", "deleterecord7.dev.atlaspds.dev")
+
+		deleteInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       "invalid/rkey/slashes",
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleDeleteRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - missing required fields", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:deleterecord8", "deleterecord8@example.com", "deleterecord8.dev.atlaspds.dev")
+
+		testCases := []struct {
+			name  string
+			input map[string]any
+		}{
+			{"missing repo", map[string]any{"collection": "app.bsky.feed.post", "rkey": "abc"}},
+			{"missing collection", map[string]any{"repo": actor.Did, "rkey": "abc"}},
+			{"missing rkey", map[string]any{"repo": actor.Did, "collection": "app.bsky.feed.post"}},
+		}
+
+		for _, tc := range testCases {
+			body, err := json.Marshal(tc.input)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleDeleteRecord(w, req)
+
+			require.Equal(t, http.StatusBadRequest, w.Code, "test case: %s", tc.name)
+		}
+	})
+
+	t.Run("error - no auth", func(t *testing.T) {
+		t.Parallel()
+		router := srv.hostMiddleware(srv.router())
+
+		deleteInput := map[string]any{
+			"repo":       "did:plc:noauth",
+			"collection": "app.bsky.feed.post",
+			"rkey":       "abc123",
+		}
+
+		deleteBody, err := json.Marshal(deleteInput)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.deleteRecord", bytes.NewReader(deleteBody))
+		req.Host = testPDSHost
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
