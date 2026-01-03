@@ -156,7 +156,6 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			s.internalErr(w, fmt.Errorf("failed to authenticate"))
 			return
 		}
-
 		if actor == nil {
 			s.err(w, http.StatusUnauthorized, fmt.Errorf("actor not found"))
 			return
@@ -172,6 +171,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 						s.err(w, http.StatusUnauthorized, fmt.Errorf("refresh token expired"))
 						return
 					}
+
 					found = true
 					break
 				}

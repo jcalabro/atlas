@@ -53,7 +53,6 @@ func (s *server) handleRoot(w http.ResponseWriter, r *http.Request) {
       █▅▇▅▁▁▃███████████▄▁  ▆████▁                                      
       █▃▁▅███████▇▂▁████▃  ▄██████▄▁                                    
       ▄███████▇▅▃▁▆█████▃  ▆██▇▅▇▆▆▆▆▃                                  
-       ▁▃▃▃▃▂    ▁▃▃▃▃▃▂   ▁▃▃▃▃▃▃▃▃▃▂                                  
                                                                                                 
 
 This is an AT Protocol Personal Data Server (aka, an atproto PDS)

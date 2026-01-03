@@ -28,21 +28,21 @@ type Session struct {
 }
 
 func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	var in atproto.ServerCreateSession_Input
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		s.badRequest(w, fmt.Errorf("invalid request body: %w", err))
 		return
 	}
 
-	if in.Identifier == "" || in.Password == "" {
-		s.badRequest(w, fmt.Errorf("identifier and password are required"))
+	identifier := strings.ToLower(in.Identifier)
+	if in.Identifier == "" {
+		s.badRequest(w, fmt.Errorf("identifier is required"))
 		return
 	}
-
-	// normalize identifier
-	identifier := strings.ToLower(in.Identifier)
+	if in.Password == "" {
+		s.badRequest(w, fmt.Errorf("password is required"))
+		return
+	}
 
 	var (
 		actor *types.Actor
@@ -52,15 +52,15 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(identifier, "did:") {
 		// try parsing as DID first
 		if _, parseErr := syntax.ParseDID(identifier); parseErr == nil {
-			actor, err = s.db.GetActorByDID(ctx, identifier)
+			actor, err = s.db.GetActorByDID(r.Context(), identifier)
 		}
 	} else {
 		// try parsing as handle
 		if handle, parseErr := syntax.ParseHandle(identifier); parseErr == nil {
-			actor, err = s.db.GetActorByHandle(ctx, handle.String())
+			actor, err = s.db.GetActorByHandle(r.Context(), handle.String())
 		} else {
 			// fall back to email
-			actor, err = s.db.GetActorByEmail(ctx, identifier)
+			actor, err = s.db.GetActorByEmail(r.Context(), identifier)
 		}
 	}
 	if err != nil {
@@ -78,14 +78,13 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	session, err := s.createSession(ctx, actor)
+	session, err := s.createSession(r.Context(), actor)
 	if err != nil {
 		s.log.Error("failed to create session", "did", actor.Did, "err", err)
 		s.internalErr(w, fmt.Errorf("failed to create session"))
 		return
 	}
 
-	// build response
 	var status *string
 	if !actor.Active {
 		deactivated := "deactivated"
@@ -162,7 +161,6 @@ func (s *server) createSession(ctx context.Context, actor *types.Actor) (*Sessio
 	}, nil
 }
 
-// VerifiedClaims contains the verified claims from a token
 type VerifiedClaims struct {
 	DID   string
 	JTI   string
@@ -234,9 +232,7 @@ func (s *server) verifyToken(ctx context.Context, tokenString string, expectedSc
 }
 
 func (s *server) handleGetSession(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	actor := actorFromContext(ctx)
+	actor := actorFromContext(r.Context())
 	if actor == nil {
 		s.internalErr(w, fmt.Errorf("actor not found in context"))
 		return
@@ -262,15 +258,13 @@ func (s *server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleRefreshSession(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	actor := actorFromContext(ctx)
+	actor := actorFromContext(r.Context())
 	if actor == nil {
 		s.internalErr(w, fmt.Errorf("actor not found in context"))
 		return
 	}
 
-	refreshToken := tokenFromContext(ctx)
+	refreshToken := tokenFromContext(r.Context())
 	if refreshToken == "" {
 		s.internalErr(w, fmt.Errorf("refresh token not found in context"))
 		return
@@ -286,7 +280,7 @@ func (s *server) handleRefreshSession(w http.ResponseWriter, r *http.Request) {
 	actor.RefreshTokens = newRefreshTokens
 
 	// create a new session
-	session, err := s.createSession(ctx, actor)
+	session, err := s.createSession(r.Context(), actor)
 	if err != nil {
 		s.log.Error("failed to create new session for refresh", "did", actor.Did, "error", err)
 		s.internalErr(w, fmt.Errorf("failed to create session"))
@@ -337,14 +331,13 @@ func (s *server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	// remove the refresh token that matches this JTI
 	newRefreshTokens := make([]*types.RefreshToken, 0, len(actor.RefreshTokens))
 	for _, rt := range actor.RefreshTokens {
-		// parse the refresh token to get its JTI
 		rtClaims, err := s.verifyRefreshToken(ctx, rt.Token)
 		if err != nil {
-			// skip invalid tokens
-			continue
+			continue // skip invalid tokens
 		}
-		// keep tokens that don't match the JTI
+
 		if rtClaims.JTI != claims.JTI {
+			// keep tokens that don't match the JTI
 			newRefreshTokens = append(newRefreshTokens, rt)
 		}
 	}
@@ -356,6 +349,4 @@ func (s *server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 		s.internalErr(w, fmt.Errorf("failed to delete session"))
 		return
 	}
-
-	w.WriteHeader(http.StatusOK)
 }
