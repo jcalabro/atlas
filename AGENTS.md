@@ -61,6 +61,8 @@ We say it's high availability because the system is designed to be run with mult
     - Tests should use `t.Parallel()` wherever possible for performance and to better attempt to detect race conditions
     - Declare a `ctx := t.Context()` at the top of each test function that needs a context object and use that throughout. Don't use `context.Background()` if you can avoid it.
     - Prefer `require` over `assert` from the testify library
+- **Database interactions**:
+    - When we are using foundationdb, prefer writing maximally correct and resource effecient code over getting the most code reuse. It's better to do a single read transaction than have an N+1 query problem where we're calling some other helper function, which requires many transactions.
 
 ## Style
 

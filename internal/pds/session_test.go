@@ -27,14 +27,18 @@ func TestCreateSession(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	// create a context with host config for session creation
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	t.Run("creates valid access and refresh tokens", func(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser123",
 			Email:         "test@example.com",
 			Handle:        "test.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -46,7 +50,7 @@ func TestCreateSession(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 		require.NotNil(t, session)
 
@@ -87,6 +91,7 @@ func TestCreateSession(t *testing.T) {
 			Did:           "did:plc:testuser456",
 			Email:         "testsaverefresh@example.com",
 			Handle:        "testsaverefresh.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -98,10 +103,10 @@ func TestCreateSession(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
-		retrievedActor, err := srv.db.GetActorByEmail(ctx, actor.Email)
+		retrievedActor, err := srv.db.GetActorByEmail(ctx, testPDSHost, actor.Email)
 		require.NoError(t, err)
 		require.NotNil(t, retrievedActor)
 
@@ -120,6 +125,7 @@ func TestCreateSession(t *testing.T) {
 			Did:           "did:plc:testuser789",
 			Email:         "testmultirefresh@example.com",
 			Handle:        "testmultirefresh.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -131,17 +137,17 @@ func TestCreateSession(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session1, err := srv.createSession(ctx, actor)
+		session1, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
-		retrievedActor, err := srv.db.GetActorByEmail(ctx, actor.Email)
+		retrievedActor, err := srv.db.GetActorByEmail(ctx, testPDSHost, actor.Email)
 		require.NoError(t, err)
 		require.Len(t, retrievedActor.RefreshTokens, 1)
 
-		session2, err := srv.createSession(ctx, retrievedActor)
+		session2, err := srv.createSession(hostCtx, retrievedActor)
 		require.NoError(t, err)
 
-		retrievedActor, err = srv.db.GetActorByEmail(ctx, actor.Email)
+		retrievedActor, err = srv.db.GetActorByEmail(ctx, testPDSHost, actor.Email)
 		require.NoError(t, err)
 		require.Len(t, retrievedActor.RefreshTokens, 2)
 
@@ -156,6 +162,7 @@ func TestCreateSession(t *testing.T) {
 			Did:           "did:plc:testuser101112",
 			Email:         "test4@example.com",
 			Handle:        "test4.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -167,7 +174,7 @@ func TestCreateSession(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
 		accessToken, err := jwt.Parse(session.AccessToken, func(token *jwt.Token) (any, error) {
@@ -191,6 +198,7 @@ func TestCreateSession(t *testing.T) {
 			Did:           "did:plc:testuser131415",
 			Email:         "test5@example.com",
 			Handle:        "test5.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -202,7 +210,7 @@ func TestCreateSession(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
 		refreshToken, err := jwt.Parse(session.RefreshToken, func(token *jwt.Token) (any, error) {
@@ -230,8 +238,11 @@ func TestVerifyAccessToken(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	// create a context with host config for session creation
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	t.Run("verifies valid access token", func(t *testing.T) {
 		t.Parallel()
@@ -240,6 +251,7 @@ func TestVerifyAccessToken(t *testing.T) {
 			Did:           "did:plc:testuser123",
 			Email:         "test@example.com",
 			Handle:        "test.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -251,10 +263,10 @@ func TestVerifyAccessToken(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
-		claims, err := srv.verifyAccessToken(ctx, session.AccessToken)
+		claims, err := srv.verifyAccessToken(hostCtx, session.AccessToken)
 		require.NoError(t, err)
 		require.NotNil(t, claims)
 
@@ -270,6 +282,7 @@ func TestVerifyAccessToken(t *testing.T) {
 			Did:           "did:plc:testuser456rejectrefresh",
 			Email:         "testrejectrefresh@example.com",
 			Handle:        "testrejectrefresh.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -281,10 +294,10 @@ func TestVerifyAccessToken(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
-		_, err = srv.verifyAccessToken(ctx, session.RefreshToken)
+		_, err = srv.verifyAccessToken(hostCtx, session.RefreshToken)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid scope")
 	})
@@ -297,7 +310,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:testuser789",
 			"iat":   expiredTime.UTC().Unix(),
 			"exp":   expiredTime.UTC().Unix(),
@@ -308,7 +321,7 @@ func TestVerifyAccessToken(t *testing.T) {
 		accessString, err := accessToken.SignedString(signingKey)
 		require.NoError(t, err)
 
-		_, err = srv.verifyAccessToken(ctx, accessString)
+		_, err = srv.verifyAccessToken(hostCtx, accessString)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "token is expired")
 	})
@@ -331,7 +344,7 @@ func TestVerifyAccessToken(t *testing.T) {
 		accessString, err := accessToken.SignedString(signingKey)
 		require.NoError(t, err)
 
-		_, err = srv.verifyAccessToken(ctx, accessString)
+		_, err = srv.verifyAccessToken(hostCtx, accessString)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid audience")
 	})
@@ -346,7 +359,7 @@ func TestVerifyAccessToken(t *testing.T) {
 
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:testuser131415",
 			"iat":   now.UTC().Unix(),
 			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
@@ -357,14 +370,14 @@ func TestVerifyAccessToken(t *testing.T) {
 		accessString, err := accessToken.SignedString(wrongKey)
 		require.NoError(t, err)
 
-		_, err = srv.verifyAccessToken(ctx, accessString)
+		_, err = srv.verifyAccessToken(hostCtx, accessString)
 		require.Error(t, err)
 	})
 
 	t.Run("rejects malformed token", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := srv.verifyAccessToken(ctx, "not.a.valid.jwt")
+		_, err := srv.verifyAccessToken(hostCtx, "not.a.valid.jwt")
 		require.Error(t, err)
 	})
 
@@ -376,7 +389,7 @@ func TestVerifyAccessToken(t *testing.T) {
 		// Missing sub claim
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"iat":   now.UTC().Unix(),
 			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
 			"jti":   "test-jti-abc",
@@ -386,7 +399,7 @@ func TestVerifyAccessToken(t *testing.T) {
 		accessString, err := accessToken.SignedString(signingKey)
 		require.NoError(t, err)
 
-		_, err = srv.verifyAccessToken(ctx, accessString)
+		_, err = srv.verifyAccessToken(hostCtx, accessString)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "missing or invalid sub claim")
 	})
@@ -400,8 +413,11 @@ func TestVerifyRefreshToken(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	// create a context with host config for session creation
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	t.Run("verifies valid refresh token", func(t *testing.T) {
 		t.Parallel()
@@ -410,6 +426,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 			Did:           "did:plc:testuser123",
 			Email:         "test@example.com",
 			Handle:        "test.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -421,10 +438,10 @@ func TestVerifyRefreshToken(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
-		claims, err := srv.verifyRefreshToken(ctx, session.RefreshToken)
+		claims, err := srv.verifyRefreshToken(hostCtx, session.RefreshToken)
 		require.NoError(t, err)
 		require.NotNil(t, claims)
 
@@ -440,6 +457,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 			Did:           "did:plc:testuser456rejectaccess",
 			Email:         "testrejectaccess@example.com",
 			Handle:        "testrejectaccess.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -451,10 +469,10 @@ func TestVerifyRefreshToken(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
-		_, err = srv.verifyRefreshToken(ctx, session.AccessToken)
+		_, err = srv.verifyRefreshToken(hostCtx, session.AccessToken)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid scope")
 	})
@@ -467,7 +485,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 
 		refreshClaims := jwt.MapClaims{
 			"scope": "com.atproto.refresh",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:testuser789",
 			"iat":   expiredTime.UTC().Unix(),
 			"exp":   expiredTime.UTC().Unix(),
@@ -478,7 +496,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 		refreshString, err := refreshToken.SignedString(signingKey)
 		require.NoError(t, err)
 
-		_, err = srv.verifyRefreshToken(ctx, refreshString)
+		_, err = srv.verifyRefreshToken(hostCtx, refreshString)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "token is expired")
 	})
@@ -490,6 +508,7 @@ func TestVerifyRefreshToken(t *testing.T) {
 			Did:           "did:plc:testuser101112",
 			Email:         "testjti@example.com",
 			Handle:        "testjti.dev.atlaspds.net",
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -501,13 +520,13 @@ func TestVerifyRefreshToken(t *testing.T) {
 		err := srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
-		accessClaims, err := srv.verifyAccessToken(ctx, session.AccessToken)
+		accessClaims, err := srv.verifyAccessToken(hostCtx, session.AccessToken)
 		require.NoError(t, err)
 
-		refreshClaims, err := srv.verifyRefreshToken(ctx, session.RefreshToken)
+		refreshClaims, err := srv.verifyRefreshToken(hostCtx, session.RefreshToken)
 		require.NoError(t, err)
 
 		require.Equal(t, accessClaims.JTI, refreshClaims.JTI)
@@ -523,8 +542,8 @@ func TestHandleCreateSession(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
 
 	setupTestActor := func(did, email, handle, password string) *types.Actor {
 		pwHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -534,6 +553,7 @@ func TestHandleCreateSession(t *testing.T) {
 			Did:            did,
 			Email:          email,
 			Handle:         handle,
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
@@ -549,6 +569,12 @@ func TestHandleCreateSession(t *testing.T) {
 		return actor
 	}
 
+	// helper to add host context to requests
+	addHostContext := func(req *http.Request) *http.Request {
+		ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+		return req.WithContext(ctx)
+	}
+
 	t.Run("creates session with DID identifier", func(t *testing.T) {
 		t.Parallel()
 
@@ -559,6 +585,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"identifier":"did:plc:testuser1","password":"password123"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -586,6 +613,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"identifier":"test2.dev.atlaspds.net","password":"password456"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -608,6 +636,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"identifier":"test3@example.com","password":"password789"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -631,6 +660,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"identifier":"test4@example.com","password":"wrongpassword"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -644,6 +674,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"identifier":"nonexistent@example.com","password":"password"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -657,6 +688,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"password":"password"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -670,6 +702,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"identifier":"test@example.com"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -685,6 +718,7 @@ func TestHandleCreateSession(t *testing.T) {
 			Did:            "did:plc:testuser5",
 			Email:          "test5@example.com",
 			Handle:         "test5.dev.atlaspds.net",
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
@@ -702,6 +736,7 @@ func TestHandleCreateSession(t *testing.T) {
 
 		reqBody := `{"identifier":"test5@example.com","password":"password"}`
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createSession", strings.NewReader(reqBody))
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -723,8 +758,11 @@ func TestHandleGetSession(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	// create a context with host config for session creation
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
 		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
@@ -734,6 +772,7 @@ func TestHandleGetSession(t *testing.T) {
 			Did:            did,
 			Email:          email,
 			Handle:         handle,
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
@@ -746,10 +785,16 @@ func TestHandleGetSession(t *testing.T) {
 		err = srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
 		return actor, session
+	}
+
+	// helper to add host context to requests
+	addHostContext := func(req *http.Request) *http.Request {
+		ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+		return req.WithContext(ctx)
 	}
 
 	t.Run("returns session info with valid access token", func(t *testing.T) {
@@ -762,6 +807,7 @@ func TestHandleGetSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -787,6 +833,7 @@ func TestHandleGetSession(t *testing.T) {
 			Did:            "did:plc:getsession2",
 			Email:          "get2@example.com",
 			Handle:         "get2.dev.atlaspds.net",
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: false,
 			CreatedAt:      timestamppb.Now(),
@@ -799,7 +846,7 @@ func TestHandleGetSession(t *testing.T) {
 		err = srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
 		w := httptest.NewRecorder()
@@ -807,6 +854,7 @@ func TestHandleGetSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -826,6 +874,7 @@ func TestHandleGetSession(t *testing.T) {
 		router := srv.router()
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -839,6 +888,7 @@ func TestHandleGetSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer invalid.token.here")
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -854,6 +904,7 @@ func TestHandleGetSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -868,8 +919,11 @@ func TestHandleRefreshSession(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	// create a context with host config for session creation
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
 		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
@@ -879,6 +933,7 @@ func TestHandleRefreshSession(t *testing.T) {
 			Did:            did,
 			Email:          email,
 			Handle:         handle,
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
@@ -891,10 +946,16 @@ func TestHandleRefreshSession(t *testing.T) {
 		err = srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
 		return actor, session
+	}
+
+	// helper to add host context to requests
+	addHostContext := func(req *http.Request) *http.Request {
+		ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+		return req.WithContext(ctx)
 	}
 
 	t.Run("refreshes session with valid refresh token", func(t *testing.T) {
@@ -907,6 +968,7 @@ func TestHandleRefreshSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -943,6 +1005,7 @@ func TestHandleRefreshSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -955,6 +1018,7 @@ func TestHandleRefreshSession(t *testing.T) {
 		router := srv.router()
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -968,7 +1032,7 @@ func TestHandleRefreshSession(t *testing.T) {
 
 		refreshClaims := jwt.MapClaims{
 			"scope": "com.atproto.refresh",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:refresh3",
 			"iat":   expiredTime.UTC().Unix(),
 			"exp":   expiredTime.UTC().Unix(),
@@ -984,6 +1048,7 @@ func TestHandleRefreshSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
 		req.Header.Set("Authorization", "Bearer "+refreshString)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -998,8 +1063,11 @@ func TestHandleDeleteSession(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	// create a context with host config for session creation
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
 		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
@@ -1009,6 +1077,7 @@ func TestHandleDeleteSession(t *testing.T) {
 			Did:            did,
 			Email:          email,
 			Handle:         handle,
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
@@ -1021,10 +1090,16 @@ func TestHandleDeleteSession(t *testing.T) {
 		err = srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
 		return actor, session
+	}
+
+	// helper to add host context to requests
+	addHostContext := func(req *http.Request) *http.Request {
+		ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+		return req.WithContext(ctx)
 	}
 
 	t.Run("deletes session with valid access token", func(t *testing.T) {
@@ -1042,6 +1117,7 @@ func TestHandleDeleteSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1060,7 +1136,7 @@ func TestHandleDeleteSession(t *testing.T) {
 		// create a second session
 		updatedActor, err := srv.db.GetActorByDID(ctx, actor.Did)
 		require.NoError(t, err)
-		session2, err := srv.createSession(ctx, updatedActor)
+		session2, err := srv.createSession(hostCtx, updatedActor)
 		require.NoError(t, err)
 
 		// verify two refresh tokens exist
@@ -1073,6 +1149,7 @@ func TestHandleDeleteSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session1.AccessToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1091,6 +1168,7 @@ func TestHandleDeleteSession(t *testing.T) {
 		router := srv.router()
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1106,6 +1184,7 @@ func TestHandleDeleteSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1119,6 +1198,7 @@ func TestHandleDeleteSession(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.deleteSession", nil)
 		req.Header.Set("Authorization", "Bearer invalid.token.here")
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1133,8 +1213,11 @@ func TestAuthMiddleware(t *testing.T) {
 	require.NoError(t, err)
 
 	srv := testServer(t)
-	srv.cfg.signingKey = signingKey
-	srv.cfg.serviceDID = "did:plc:test-service-12345"
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	// create a context with host config for session creation
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
 		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
@@ -1144,6 +1227,7 @@ func TestAuthMiddleware(t *testing.T) {
 			Did:            did,
 			Email:          email,
 			Handle:         handle,
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
@@ -1156,10 +1240,16 @@ func TestAuthMiddleware(t *testing.T) {
 		err = srv.db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		session, err := srv.createSession(ctx, actor)
+		session, err := srv.createSession(hostCtx, actor)
 		require.NoError(t, err)
 
 		return actor, session
+	}
+
+	// helper to add host context to requests
+	addHostContext := func(req *http.Request) *http.Request {
+		ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+		return req.WithContext(ctx)
 	}
 
 	t.Run("accepts valid access token for access endpoint", func(t *testing.T) {
@@ -1172,6 +1262,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1187,6 +1278,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1199,6 +1291,7 @@ func TestAuthMiddleware(t *testing.T) {
 		router := srv.router()
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1229,6 +1322,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 				req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 				req.Header.Set("Authorization", tt.header)
+				req = addHostContext(req)
 				router.ServeHTTP(w, req)
 
 				require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1244,6 +1338,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer not.a.valid.jwt.token")
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1262,7 +1357,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:authmw3",
 			"iat":   expiredTime.UTC().Unix(),
 			"exp":   expiredTime.UTC().Unix(),
@@ -1278,6 +1373,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+accessString)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1293,6 +1389,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1313,6 +1410,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1341,6 +1439,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+accessString)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1356,7 +1455,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:authmw7",
 			"iat":   now.UTC().Unix(),
 			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
@@ -1372,6 +1471,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+accessString)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1384,7 +1484,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		accessClaims := jwt.MapClaims{
 			"scope": "com.atproto.access",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:nonexistent",
 			"iat":   now.UTC().Unix(),
 			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
@@ -1400,6 +1500,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
 		req.Header.Set("Authorization", "Bearer "+accessString)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1425,6 +1526,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
 		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1447,7 +1549,7 @@ func TestAuthMiddleware(t *testing.T) {
 		// create a JWT that is still valid, but expired in the database
 		refreshClaims := jwt.MapClaims{
 			"scope": "com.atproto.refresh",
-			"aud":   srv.cfg.serviceDID,
+			"aud":   srv.hosts[testPDSHost].serviceDID,
 			"sub":   "did:plc:authmw9",
 			"iat":   now.UTC().Unix(),
 			"exp":   now.Add(refreshTokenTTL).UTC().Unix(), // JWT not expired
@@ -1462,6 +1564,7 @@ func TestAuthMiddleware(t *testing.T) {
 			Did:            "did:plc:authmw9",
 			Email:          "authmw9@example.com",
 			Handle:         "authmw9.dev.atlaspds.net",
+			PdsHost:        testPDSHost,
 			PasswordHash:   pwHash,
 			EmailConfirmed: true,
 			CreatedAt:      timestamppb.Now(),
@@ -1485,6 +1588,7 @@ func TestAuthMiddleware(t *testing.T) {
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
 		req.Header.Set("Authorization", "Bearer "+refreshString)
+		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -1513,6 +1617,7 @@ func TestAuthMiddleware(t *testing.T) {
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req = addHostContext(req)
 
 		testHandler(w, req)
 

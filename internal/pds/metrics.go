@@ -16,7 +16,7 @@ var (
 			Namespace: namespace,
 			Help:      "Total number of requests served",
 		},
-		[]string{"version", "service", "handler", "method", "status"},
+		[]string{"version", "service", "host", "handler", "method", "status"},
 	)
 
 	requestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
@@ -24,5 +24,5 @@ var (
 		Namespace: namespace,
 		Help:      "Request duration in seconds",
 		Buckets:   prometheus.ExponentialBuckets(0.001, 2, 20),
-	}, []string{"service", "handler", "method", "status"})
+	}, []string{"service", "host", "handler", "method", "status"})
 )

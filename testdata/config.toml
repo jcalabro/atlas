@@ -1,0 +1,7 @@
+[hosts."dev.atlaspds.net"]
+service_did = "did:web:dev.atlaspds.net"
+jwt_signing_key = "./testdata/jwt-signing-key.pem"
+user_domains = [".dev.atlaspds.net"]
+contact_email = ""
+privacy_policy = ""
+terms_of_service = ""

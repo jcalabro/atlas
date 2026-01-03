@@ -3,6 +3,7 @@ package pds
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type didDocument struct {
@@ -18,14 +19,20 @@ type didService struct {
 }
 
 func (s *server) handleWellKnown(w http.ResponseWriter, r *http.Request) {
+	host := hostFromContext(r.Context())
+	if host == nil {
+		s.internalErr(w, fmt.Errorf("host config not found in context"))
+		return
+	}
+
 	doc := didDocument{
 		Context: []string{"https://www.w3.org/ns/did/v1"},
-		ID:      s.cfg.serviceDID,
+		ID:      host.serviceDID,
 		Service: []didService{
 			{
 				ID:              "#atproto_pds",
 				Type:            "AtprotoPersonalDataServer",
-				ServiceEndpoint: fmt.Sprintf("https://%s", s.cfg.hostname),
+				ServiceEndpoint: fmt.Sprintf("https://%s", host.hostname),
 			},
 		},
 	}
@@ -34,16 +41,40 @@ func (s *server) handleWellKnown(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleAtprotoDid(w http.ResponseWriter, r *http.Request) {
-	host := r.Host
-
-	// if the host matches our configured hostname, return the server's DID
-	if host == s.cfg.hostname {
-		s.plaintextOK(w, "%s", s.cfg.serviceDID)
+	ctx := r.Context()
+	host := hostFromContext(ctx)
+	if host == nil {
+		s.internalErr(w, fmt.Errorf("host config not found in context"))
 		return
 	}
 
-	// @TODO (jrc): implement subdomain lookup for user DIDs
-	// for now, return 204 No Content for any subdomain requests
+	// strip port from host header if present
+	reqHost := r.Host
+	if idx := strings.LastIndex(reqHost, ":"); idx != -1 {
+		reqHost = reqHost[:idx]
+	}
+
+	// if the host matches our configured hostname, return the server's DID
+	if reqHost == host.hostname {
+		s.plaintextOK(w, "%s", host.serviceDID)
+		return
+	}
+
+	// check if this is a user handle subdomain
+	// user handles are like: user.pds1.dev.atlaspds.net
+	// the host middleware already validated the base host, so if we got here
+	// with a different reqHost, it might be a handle lookup
+	actor, err := s.db.GetActorByHandle(ctx, reqHost)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to look up handle: %w", err))
+		return
+	}
+	if actor != nil && actor.PdsHost == host.hostname {
+		s.plaintextOK(w, "%s", actor.Did)
+		return
+	}
+
+	// not found
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -56,9 +87,15 @@ type oauthProtectedResource struct {
 }
 
 func (s *server) handleOauthProtectedResource(w http.ResponseWriter, r *http.Request) {
+	host := hostFromContext(r.Context())
+	if host == nil {
+		s.internalErr(w, fmt.Errorf("host config not found in context"))
+		return
+	}
+
 	resource := oauthProtectedResource{
-		Resource:               fmt.Sprintf("https://%s", s.cfg.hostname),
-		AuthorizationServers:   []string{fmt.Sprintf("https://%s", s.cfg.hostname)},
+		Resource:               fmt.Sprintf("https://%s", host.hostname),
+		AuthorizationServers:   []string{fmt.Sprintf("https://%s", host.hostname)},
 		ScopesSupported:        []string{},
 		BearerMethodsSupported: []string{"header"},
 		ResourceDocumentation:  "https://atproto.com",
@@ -95,7 +132,13 @@ type oauthAuthorizationServer struct {
 }
 
 func (s *server) handleOauthAuthorizationServer(w http.ResponseWriter, r *http.Request) {
-	baseURL := fmt.Sprintf("https://%s", s.cfg.hostname)
+	host := hostFromContext(r.Context())
+	if host == nil {
+		s.internalErr(w, fmt.Errorf("host config not found in context"))
+		return
+	}
+
+	baseURL := fmt.Sprintf("https://%s", host.hostname)
 
 	metadata := oauthAuthorizationServer{
 		Issuer:                                             baseURL,

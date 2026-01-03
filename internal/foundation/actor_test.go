@@ -11,6 +11,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const testPDSHost = "test.atlaspds.net"
+
 func TestSaveActor(t *testing.T) {
 	t.Parallel()
 	db := testDB(t)
@@ -29,6 +31,7 @@ func TestSaveActor(t *testing.T) {
 			Active:                true,
 			RotationKeys:          [][]byte{[]byte("rotation_key")},
 			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
+			PdsHost:               testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -48,6 +51,7 @@ func TestSaveActor(t *testing.T) {
 			Active:                true,
 			RotationKeys:          [][]byte{[]byte("rotation_key")},
 			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
+			PdsHost:               testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -62,7 +66,7 @@ func TestSaveActor(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify the update persisted
-		retrieved, err := db.GetActorByEmail(ctx, actor.Email)
+		retrieved, err := db.GetActorByEmail(ctx, testPDSHost, actor.Email)
 		require.NoError(t, err)
 		require.Equal(t, true, retrieved.EmailConfirmed)
 		require.Equal(t, "", retrieved.EmailVerificationCode)
@@ -79,6 +83,7 @@ func TestSaveActor(t *testing.T) {
 			SigningKey:    []byte("key"),
 			RotationKeys:  [][]byte{[]byte("rotation")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -105,12 +110,13 @@ func TestGetActorByEmail(t *testing.T) {
 			Active:                true,
 			RotationKeys:          [][]byte{[]byte("rotation_key")},
 			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
+			PdsHost:               testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
 		require.NoError(t, err)
 
-		retrieved, err := db.GetActorByEmail(ctx, "retrieve@example.com")
+		retrieved, err := db.GetActorByEmail(ctx, testPDSHost, "retrieve@example.com")
 		require.NoError(t, err)
 		require.NotNil(t, retrieved)
 
@@ -126,7 +132,7 @@ func TestGetActorByEmail(t *testing.T) {
 	})
 
 	t.Run("returns nil for non-existent email", func(t *testing.T) {
-		actor, err := db.GetActorByEmail(ctx, "nonexistent@example.com")
+		actor, err := db.GetActorByEmail(ctx, testPDSHost, "nonexistent@example.com")
 		require.NoError(t, err)
 		require.Nil(t, actor)
 	})
@@ -141,6 +147,7 @@ func TestGetActorByEmail(t *testing.T) {
 			SigningKey:    []byte("key1"),
 			RotationKeys:  [][]byte{[]byte("rotation1")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 		actor2 := &types.Actor{
 			Did:           "did:plc:multi2",
@@ -151,6 +158,7 @@ func TestGetActorByEmail(t *testing.T) {
 			SigningKey:    []byte("key2"),
 			RotationKeys:  [][]byte{[]byte("rotation2")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 		actor3 := &types.Actor{
 			Did:           "did:plc:multi3",
@@ -161,6 +169,7 @@ func TestGetActorByEmail(t *testing.T) {
 			SigningKey:    []byte("key3"),
 			RotationKeys:  [][]byte{[]byte("rotation3")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor1)
@@ -170,7 +179,7 @@ func TestGetActorByEmail(t *testing.T) {
 		err = db.SaveActor(ctx, actor3)
 		require.NoError(t, err)
 
-		retrieved, err := db.GetActorByEmail(ctx, "user2@example.com")
+		retrieved, err := db.GetActorByEmail(ctx, testPDSHost, "user2@example.com")
 		require.NoError(t, err)
 		require.Equal(t, "did:plc:multi2", retrieved.Did)
 		require.Equal(t, "user2.dev.atlaspds.net", retrieved.Handle)
@@ -196,6 +205,7 @@ func TestGetActorByDID(t *testing.T) {
 			Active:                true,
 			RotationKeys:          [][]byte{[]byte("rotation_key")},
 			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
+			PdsHost:               testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -232,6 +242,7 @@ func TestGetActorByDID(t *testing.T) {
 			SigningKey:    []byte("key1"),
 			RotationKeys:  [][]byte{[]byte("rotation1")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 		actor2 := &types.Actor{
 			Did:           "did:plc:multidid2",
@@ -242,6 +253,7 @@ func TestGetActorByDID(t *testing.T) {
 			SigningKey:    []byte("key2"),
 			RotationKeys:  [][]byte{[]byte("rotation2")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 		actor3 := &types.Actor{
 			Did:           "did:plc:multidid3",
@@ -252,6 +264,7 @@ func TestGetActorByDID(t *testing.T) {
 			SigningKey:    []byte("key3"),
 			RotationKeys:  [][]byte{[]byte("rotation3")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor1)
@@ -288,6 +301,7 @@ func TestGetActorByHandle(t *testing.T) {
 			Active:                true,
 			RotationKeys:          [][]byte{[]byte("rotation_key")},
 			RefreshTokens:         []*types.RefreshToken{{Token: "refresh_token"}},
+			PdsHost:               testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -324,6 +338,7 @@ func TestGetActorByHandle(t *testing.T) {
 			SigningKey:    []byte("key1"),
 			RotationKeys:  [][]byte{[]byte("rotation1")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 		actor2 := &types.Actor{
 			Did:           "did:plc:multihandle2",
@@ -334,6 +349,7 @@ func TestGetActorByHandle(t *testing.T) {
 			SigningKey:    []byte("key2"),
 			RotationKeys:  [][]byte{[]byte("rotation2")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 		actor3 := &types.Actor{
 			Did:           "did:plc:multihandle3",
@@ -344,6 +360,7 @@ func TestGetActorByHandle(t *testing.T) {
 			SigningKey:    []byte("key3"),
 			RotationKeys:  [][]byte{[]byte("rotation3")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor1)
@@ -370,6 +387,7 @@ func TestGetActorByHandle(t *testing.T) {
 			SigningKey:    []byte("key"),
 			RotationKeys:  [][]byte{[]byte("rotation")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -417,6 +435,7 @@ func TestActorIndexConsistency(t *testing.T) {
 			SigningKey:    []byte("key"),
 			RotationKeys:  [][]byte{[]byte("rotation")},
 			RefreshTokens: []*types.RefreshToken{},
+			PdsHost:       testPDSHost,
 		}
 
 		err := db.SaveActor(ctx, actor)
@@ -426,7 +445,7 @@ func TestActorIndexConsistency(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, byDID)
 
-		byEmail, err := db.GetActorByEmail(ctx, "consistency@example.com")
+		byEmail, err := db.GetActorByEmail(ctx, testPDSHost, "consistency@example.com")
 		require.NoError(t, err)
 		require.NotNil(t, byEmail)
 
@@ -461,6 +480,7 @@ func TestListActors(t *testing.T) {
 				Did:           fmt.Sprintf("%s%03d", prefix, i),
 				Email:         fmt.Sprintf("zlist%d@example.com", i),
 				Handle:        fmt.Sprintf("zlist%d.dev.atlaspds.net", i),
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 				SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -472,7 +492,7 @@ func TestListActors(t *testing.T) {
 		}
 
 		// query starting from our prefix
-		actors, nextCursor, err := db.ListActors(ctx, "did:plc:zlist000", 10)
+		actors, nextCursor, err := db.ListActors(ctx, testPDSHost, "did:plc:zlist000", 10)
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(actors), 3)
 		// verify our actors are in the results
@@ -495,6 +515,7 @@ func TestListActors(t *testing.T) {
 				Did:           fmt.Sprintf("%s%03d", prefix, i),
 				Email:         fmt.Sprintf("zzpage%d@example.com", i),
 				Handle:        fmt.Sprintf("zzpage%d.dev.atlaspds.net", i),
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 				SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -506,7 +527,7 @@ func TestListActors(t *testing.T) {
 		}
 
 		// fetch first page with limit 2, starting just before our data
-		actors, nextCursor, err := db.ListActors(ctx, prefix+"000", 2)
+		actors, nextCursor, err := db.ListActors(ctx, testPDSHost, prefix+"000", 2)
 		require.NoError(t, err)
 		require.Len(t, actors, 2)
 		require.NotEmpty(t, nextCursor)
@@ -527,6 +548,7 @@ func TestListActors(t *testing.T) {
 				Did:           fmt.Sprintf("%s%03d", prefix, i),
 				Email:         fmt.Sprintf("zzmid%d@example.com", i),
 				Handle:        fmt.Sprintf("zzmid%d.dev.atlaspds.net", i),
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 				SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -538,7 +560,7 @@ func TestListActors(t *testing.T) {
 		}
 
 		// fetch second page with cursor
-		actors, nextCursor, err := db.ListActors(ctx, prefix+"002", 2)
+		actors, nextCursor, err := db.ListActors(ctx, testPDSHost, prefix+"002", 2)
 		require.NoError(t, err)
 		require.Len(t, actors, 2)
 		require.NotEmpty(t, nextCursor)
@@ -559,6 +581,7 @@ func TestListActors(t *testing.T) {
 				Did:           fmt.Sprintf("%s%03d", prefix, i),
 				Email:         fmt.Sprintf("zzlast%d@example.com", i),
 				Handle:        fmt.Sprintf("zzlast%d.dev.atlaspds.net", i),
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 				SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -570,7 +593,7 @@ func TestListActors(t *testing.T) {
 		}
 
 		// fetch last page - should have our last actor
-		actors, _, err := db.ListActors(ctx, prefix+"004", 2)
+		actors, _, err := db.ListActors(ctx, testPDSHost, prefix+"004", 2)
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(actors), 1)
 		require.Equal(t, prefix+"005", actors[0].Did)
@@ -588,6 +611,7 @@ func TestListActors(t *testing.T) {
 				Did:           fmt.Sprintf("%s%03d", prefix, i),
 				Email:         fmt.Sprintf("zzone%d@example.com", i),
 				Handle:        fmt.Sprintf("zzone%d.dev.atlaspds.net", i),
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 				SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -598,7 +622,7 @@ func TestListActors(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		actors, nextCursor, err := db.ListActors(ctx, prefix+"000", 1)
+		actors, nextCursor, err := db.ListActors(ctx, testPDSHost, prefix+"000", 1)
 		require.NoError(t, err)
 		require.Len(t, actors, 1)
 		require.NotEmpty(t, nextCursor)
@@ -619,6 +643,7 @@ func TestListActors(t *testing.T) {
 				Did:           did,
 				Email:         did + "@example.com",
 				Handle:        did + ".dev.atlaspds.net",
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  []byte("hash"),
 				SigningKey:    []byte("key"),
@@ -629,7 +654,7 @@ func TestListActors(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		actors, _, err := db.ListActors(ctx, prefix+"000", 10)
+		actors, _, err := db.ListActors(ctx, testPDSHost, prefix+"000", 10)
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(actors), 3)
 		// verify our actors are returned in lexicographic order
@@ -650,6 +675,7 @@ func TestListActors(t *testing.T) {
 				Did:           fmt.Sprintf("%s%03d", prefix, i),
 				Email:         fmt.Sprintf("zzbeyond%d@example.com", i),
 				Handle:        fmt.Sprintf("zzbeyond%d.dev.atlaspds.net", i),
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 				SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -661,7 +687,7 @@ func TestListActors(t *testing.T) {
 		}
 
 		// use a cursor beyond our last actor
-		actors, nextCursor, err := db.ListActors(ctx, prefix+"999", 10)
+		actors, nextCursor, err := db.ListActors(ctx, testPDSHost, prefix+"999", 10)
 		require.NoError(t, err)
 		// no actors from our test set, but there could be other actors in the shared DB
 		for _, a := range actors {
@@ -685,6 +711,7 @@ func TestListActors(t *testing.T) {
 				Did:           did,
 				Email:         fmt.Sprintf("zzwalk%d@example.com", i),
 				Handle:        fmt.Sprintf("zzwalk%d.dev.atlaspds.net", i),
+				PdsHost:       testPDSHost,
 				CreatedAt:     timestamppb.New(time.Now()),
 				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 				SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -700,7 +727,7 @@ func TestListActors(t *testing.T) {
 		pageSize := int64(3)
 
 		// page 1: actors 0,1,2
-		actors, nextCursor, err := db.ListActors(ctx, cursor, pageSize)
+		actors, nextCursor, err := db.ListActors(ctx, testPDSHost, cursor, pageSize)
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(actors), 3)
 		require.NotEmpty(t, nextCursor)
@@ -713,7 +740,7 @@ func TestListActors(t *testing.T) {
 		cursor = nextCursor
 
 		// page 2: actors 3,4,5
-		actors, nextCursor, err = db.ListActors(ctx, cursor, pageSize)
+		actors, nextCursor, err = db.ListActors(ctx, testPDSHost, cursor, pageSize)
 		require.NoError(t, err)
 		require.GreaterOrEqual(t, len(actors), 1)
 		require.NotEmpty(t, nextCursor)
@@ -726,7 +753,7 @@ func TestListActors(t *testing.T) {
 		cursor = nextCursor
 
 		// page 3: actor 6 (last page, only 1 actor from our set)
-		actors, _, err = db.ListActors(ctx, cursor, pageSize)
+		actors, _, err = db.ListActors(ctx, testPDSHost, cursor, pageSize)
 		require.NoError(t, err)
 		// collect only our actors
 		for _, a := range actors {

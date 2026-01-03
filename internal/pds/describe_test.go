@@ -13,10 +13,12 @@ import (
 func TestHandleDescribeServer(t *testing.T) {
 	t.Parallel()
 
+	srv := testServer(t)
 	w := httptest.NewRecorder()
-	router := testServer(t).router()
+	router := srv.router()
 
 	req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.describeServer", nil)
+	req = addTestHostContext(srv, req)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)

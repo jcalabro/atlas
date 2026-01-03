@@ -33,6 +33,9 @@ func createAccount(t *testing.T, srv *server, input *atproto.ServerCreateAccount
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.createAccount", bytes.NewReader(body))
+	// add host context for tests
+	ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 
 	srv.handleCreateAccount(w, req)
@@ -90,7 +93,7 @@ func TestHandleCreateAccount(t *testing.T) {
 		require.NotEmpty(t, resp.Out.RefreshJwt)
 
 		// verify the actor was saved to the database
-		actor, err := srv.db.GetActorByEmail(ctx, *email)
+		actor, err := srv.db.GetActorByEmail(ctx, testPDSHost, *email)
 		require.NoError(t, err)
 		require.NotNil(t, actor)
 		require.Equal(t, resp.Out.Did, actor.Did)
@@ -111,12 +114,14 @@ func TestHandleCreateAccount(t *testing.T) {
 		require.Equal(t, resp.Out.RefreshJwt, actor.RefreshTokens[0].Token)
 
 		// actually attempt to verify the returned tokens to make sure it's valid
-		refreshClaims, err := srv.verifyRefreshToken(ctx, resp.Out.RefreshJwt)
+		// need host config in context for token verification
+		verifyCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
+		refreshClaims, err := srv.verifyRefreshToken(verifyCtx, resp.Out.RefreshJwt)
 		require.NoError(t, err)
 		require.NotNil(t, refreshClaims)
 		require.Equal(t, resp.Out.Did, refreshClaims.DID)
 
-		accessClaims, err := srv.verifyAccessToken(ctx, resp.Out.AccessJwt)
+		accessClaims, err := srv.verifyAccessToken(verifyCtx, resp.Out.AccessJwt)
 		require.NoError(t, err)
 		require.NotNil(t, accessClaims)
 		require.Equal(t, resp.Out.Did, accessClaims.DID)

@@ -21,6 +21,8 @@ func ValidateActor(a *types.Actor) error {
 		return fmt.Errorf("email is required")
 	case a.Handle == "":
 		return fmt.Errorf("handle is required")
+	case a.PdsHost == "":
+		return fmt.Errorf("pds_host is required")
 	case len(a.PasswordHash) == 0:
 		return fmt.Errorf("password hash is required")
 	case len(a.SigningKey) == 0:
@@ -45,16 +47,19 @@ func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) error {
 		return fmt.Errorf("failed to protobuf marshal actor: %w", err)
 	}
 
-	actorKey := pack(db.actors, actor.Did)
-	didByEmailKey := pack(db.didsByEmail, actor.Email)
-	didByHandleKey := pack(db.didsByHandle, actor.Handle)
+	actorKey := pack(db.actors.actors, actor.Did)
+	didByHandleKey := pack(db.actors.didsByHandle, actor.Handle)
+	didByEmailKey := pack(db.actors.didsByEmail, actor.PdsHost, actor.Email)
+	didByHostKey := pack(db.actors.didsByHost, actor.PdsHost, actor.Did)
 
 	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
 		tx.Set(actorKey, buf)
-		tx.Set(didByEmailKey, []byte(actor.Did))
 		tx.Set(didByHandleKey, []byte(actor.Did))
+		tx.Set(didByEmailKey, []byte(actor.Did))
+		tx.Set(didByHostKey, []byte{})
 		return nil, nil
 	})
+
 	return err
 }
 
@@ -62,7 +67,7 @@ func (db *DB) GetActorByDID(ctx context.Context, did string) (*types.Actor, erro
 	_, span := db.tracer.Start(ctx, "GetActorByDID")
 	defer span.End()
 
-	actorKey := pack(db.actors, did)
+	actorKey := pack(db.actors.actors, did)
 
 	var actor types.Actor
 	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
@@ -78,11 +83,11 @@ func (db *DB) GetActorByDID(ctx context.Context, did string) (*types.Actor, erro
 	return &actor, nil
 }
 
-func (db *DB) GetActorByEmail(ctx context.Context, email string) (*types.Actor, error) {
+func (db *DB) GetActorByEmail(ctx context.Context, pdsHost, email string) (*types.Actor, error) {
 	_, span := db.tracer.Start(ctx, "GetActorByEmail")
 	defer span.End()
 
-	didByEmailKey := pack(db.didsByEmail, email)
+	didByEmailKey := pack(db.actors.didsByEmail, pdsHost, email)
 
 	var actor types.Actor
 	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
@@ -94,7 +99,7 @@ func (db *DB) GetActorByEmail(ctx context.Context, email string) (*types.Actor, 
 			return nil, nil // not found
 		}
 
-		actorKey := pack(db.actors, string(did))
+		actorKey := pack(db.actors.actors, string(did))
 		return tx.Get(actorKey).Get()
 	})
 	if err != nil {
@@ -111,7 +116,7 @@ func (db *DB) GetActorByHandle(ctx context.Context, handle string) (*types.Actor
 	_, span := db.tracer.Start(ctx, "GetActorByHandle")
 	defer span.End()
 
-	didByHandleKey := pack(db.didsByHandle, handle)
+	didByHandleKey := pack(db.actors.didsByHandle, handle)
 
 	var actor types.Actor
 	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
@@ -123,7 +128,7 @@ func (db *DB) GetActorByHandle(ctx context.Context, handle string) (*types.Actor
 			return nil, nil // not found
 		}
 
-		actorKey := pack(db.actors, string(did))
+		actorKey := pack(db.actors.actors, string(did))
 		return tx.Get(actorKey).Get()
 	})
 	if err != nil {
@@ -136,55 +141,76 @@ func (db *DB) GetActorByHandle(ctx context.Context, handle string) (*types.Actor
 	return &actor, nil
 }
 
-func (db *DB) ListActors(ctx context.Context, cursor string, limit int64) ([]*types.Actor, string, error) {
+func (db *DB) ListActors(ctx context.Context, pdsHost, cursor string, limit int64) ([]*types.Actor, string, error) {
 	_, span := db.tracer.Start(ctx, "ListActors")
 	defer span.End()
 
 	bufs, err := readTransaction(db.db, func(tx fdb.ReadTransaction) ([][]byte, error) {
-		rangeBegin, rangeEnd := db.actors.FDBRangeKeys()
+		// create range for all keys with this pds_host prefix
+		rangeBegin := pack(db.actors.didsByHost, pdsHost)
+		rangeEnd := pack(db.actors.didsByHost, pdsHost+"\xff")
 
 		var begin fdb.KeyConvertible
 		if cursor == "" {
-			// start from the beginning of the actors directory
+			// start from the very beginning
 			begin = rangeBegin
 		} else {
 			// start from the key after the cursor (exclusive)
-			cursorKey := pack(db.actors, cursor)
-			// create a key just after the cursor by appending a null byte
+			cursorKey := pack(db.actors.didsByHost, pdsHost, cursor)
 			begin = fdb.Key(append(cursorKey, 0x00))
 		}
 
-		kr := fdb.KeyRange{
-			Begin: begin,
-			End:   rangeEnd,
-		}
+		kr := fdb.KeyRange{Begin: begin, End: rangeEnd}
+		opts := fdb.RangeOptions{Limit: int(limit + 1)}
 
-		// fetch limit+1 to determine if there are more results
-		rangeOptions := fdb.RangeOptions{
-			Limit: int(limit + 1),
-		}
-
-		var results [][]byte
-		iter := tx.GetRange(kr, rangeOptions).Iterator()
+		var futures []fdb.FutureByteSlice
+		iter := tx.GetRange(kr, opts).Iterator()
 		for iter.Advance() {
 			kv, err := iter.Get()
 			if err != nil {
 				return nil, err
 			}
-			results = append(results, kv.Value)
+
+			// extract the DID from the key tuple (pds_host, did)
+			tup, err := db.actors.didsByHost.Unpack(kv.Key)
+			if err != nil {
+				return nil, err
+			}
+			if len(tup) < 2 {
+				continue
+			}
+			did, ok := tup[1].(string)
+			if !ok {
+				continue
+			}
+
+			actorKey := pack(db.actors.actors, did)
+			futures = append(futures, tx.Get(actorKey))
 		}
 
-		return results, nil
+		// resolve all futures and collect raw bytes
+		out := make([][]byte, 0, len(futures))
+		for _, fut := range futures {
+			buf, err := fut.Get()
+			if err != nil {
+				return nil, err
+			}
+			if len(buf) > 0 {
+				out = append(out, buf)
+			}
+		}
+
+		return out, nil
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", fmt.Errorf("failed to list actors: %w", err)
 	}
 
 	actors := make([]*types.Actor, 0, len(bufs))
 	for _, buf := range bufs {
 		var actor types.Actor
 		if err := proto.Unmarshal(buf, &actor); err != nil {
-			return nil, "", fmt.Errorf("failed to protobuf unmarshal actor: %w", err)
+			return nil, "", fmt.Errorf("failed to unmarshal actor: %w", err)
 		}
 		actors = append(actors, &actor)
 	}
@@ -192,8 +218,6 @@ func (db *DB) ListActors(ctx context.Context, cursor string, limit int64) ([]*ty
 	// determine the next cursor for pagination
 	var nextCursor string
 	if int64(len(actors)) > limit {
-		// we have more results, return only the requested limit
-		// since we required limit+1
 		nextCursor = actors[limit-1].Did
 		actors = actors[:limit]
 	}

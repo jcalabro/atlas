@@ -3,6 +3,7 @@ module github.com/jcalabro/atlas
 go 1.25
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/apple/foundationdb/bindings/go v0.0.0-20250221231555-5140696da2df
 	github.com/bluesky-social/indigo v0.0.0-20251223190123-598fbf0e146e
 	github.com/golang-jwt/jwt/v5 v5.3.0

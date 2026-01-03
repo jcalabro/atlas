@@ -22,6 +22,7 @@ import (
 func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	span := spanFromContext(ctx)
+	host := hostFromContext(ctx)
 
 	var in atproto.ServerCreateAccount_Input
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -48,7 +49,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check if the handle is already taken
+	// check if the handle is already taken (handles are globally unique)
 	_, err = s.directory.LookupHandle(ctx, handle)
 	if err == nil {
 		s.badRequest(w, fmt.Errorf("handle %q is already taken", in.Handle))
@@ -59,8 +60,8 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check if the email is already taken
-	existingEmail, err := s.db.GetActorByEmail(ctx, *in.Email)
+	// check if the email is already taken on this PDS host (emails are per-PDS unique)
+	existingEmail, err := s.db.GetActorByEmail(ctx, host.hostname, *in.Email)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to get actor by email: %w", err))
 		return
@@ -114,6 +115,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		Active:                true,
 		RotationKeys:          [][]byte{rotationKey.Bytes()},
 		RefreshTokens:         []*types.RefreshToken{},
+		PdsHost:               host.hostname,
 	}
 
 	if err := s.db.SaveActor(ctx, actor); err != nil {

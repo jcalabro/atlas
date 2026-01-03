@@ -37,6 +37,7 @@ type Actor struct {
 	RefreshTokens         []*RefreshToken        `protobuf:"bytes,11,rep,name=refresh_tokens,json=refreshTokens,proto3" json:"refresh_tokens,omitempty"`
 	Head                  string                 `protobuf:"bytes,12,opt,name=head,proto3" json:"head,omitempty"`
 	Rev                   string                 `protobuf:"bytes,13,opt,name=rev,proto3" json:"rev,omitempty"`
+	PdsHost               string                 `protobuf:"bytes,14,opt,name=pds_host,json=pdsHost,proto3" json:"pds_host,omitempty"` // hostname of the PDS this actor belongs to
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -162,6 +163,13 @@ func (x *Actor) GetRev() string {
 	return ""
 }
 
+func (x *Actor) GetPdsHost() string {
+	if x != nil {
+		return x.PdsHost
+	}
+	return ""
+}
+
 type RefreshToken struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -226,7 +234,7 @@ var File_atlas_proto protoreflect.FileDescriptor
 
 const file_atlas_proto_rawDesc = "" +
 	"\n" +
-	"\vatlas.proto\x12\x05types\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc8\x03\n" +
+	"\vatlas.proto\x12\x05types\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe3\x03\n" +
 	"\x05Actor\x12\x10\n" +
 	"\x03did\x18\x01 \x01(\tR\x03did\x129\n" +
 	"\n" +
@@ -243,7 +251,8 @@ const file_atlas_proto_rawDesc = "" +
 	" \x03(\fR\frotationKeys\x12:\n" +
 	"\x0erefresh_tokens\x18\v \x03(\v2\x13.types.RefreshTokenR\rrefreshTokens\x12\x12\n" +
 	"\x04head\x18\f \x01(\tR\x04head\x12\x10\n" +
-	"\x03rev\x18\r \x01(\tR\x03rev\"\x9a\x01\n" +
+	"\x03rev\x18\r \x01(\tR\x03rev\x12\x19\n" +
+	"\bpds_host\x18\x0e \x01(\tR\apdsHost\"\x9a\x01\n" +
 	"\fRefreshToken\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +
 	"\n" +

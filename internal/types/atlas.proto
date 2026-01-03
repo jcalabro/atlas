@@ -23,6 +23,7 @@ message Actor {
   repeated RefreshToken refresh_tokens = 11;
   string head = 12;
   string rev = 13;
+  string pds_host = 14; // hostname of the PDS this actor belongs to
 }
 
 message RefreshToken {

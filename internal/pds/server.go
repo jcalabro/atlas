@@ -2,10 +2,7 @@ package pds
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -38,15 +35,8 @@ type Args struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	PLCURL string
-
-	JWTSigningKey  string
-	ServiceDID     string
-	Hostname       string
-	UserDomains    []string
-	ContactEmail   string
-	PrivacyPolicy  string
-	TermsOfService string
+	PLCURL     string
+	ConfigFile string
 
 	FDB foundation.Config
 }
@@ -57,7 +47,7 @@ type server struct {
 	log    *slog.Logger
 	tracer trace.Tracer
 
-	cfg config
+	hosts map[string]*loadedHostConfig
 
 	db *foundation.DB
 
@@ -65,41 +55,11 @@ type server struct {
 	plc       plc.PLC
 }
 
-// Static config that's loaded at startup and never changed
-type config struct {
-	signingKey     *ecdsa.PrivateKey
-	serviceDID     string
-	hostname       string
-	userDomains    []string
-	contactEmail   string
-	privacyPolicy  string
-	termsOfService string
-}
-
 func (s *server) shutdown(cancel context.CancelFunc) {
 	s.shutdownOnce.Do(func() {
 		s.log.Info("shutdown initiated")
 		cancel()
 	})
-}
-
-func loadSigningKey(path string) (*ecdsa.PrivateKey, error) {
-	keyBytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read signing key file: %w", err)
-	}
-
-	block, _ := pem.Decode(keyBytes)
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block containing signing key")
-	}
-
-	key, err := x509.ParseECPrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse EC private key: %w", err)
-	}
-
-	return key, nil
 }
 
 func Run(ctx context.Context, args *Args) error {
@@ -113,17 +73,18 @@ func Run(ctx context.Context, args *Args) error {
 	}
 	tracer := otel.Tracer(serviceName)
 
+	hosts, err := LoadConfig(args.ConfigFile)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+	log.Info("loaded host configurations", "hosts", len(hosts))
+
 	plcClient, err := plc.NewClient(&plc.ClientArgs{
 		Tracer: tracer,
 		PLCURL: args.PLCURL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize plc client: %w", err)
-	}
-
-	signingKey, err := loadSigningKey(args.JWTSigningKey)
-	if err != nil {
-		return fmt.Errorf("failed to load JWT signing key: %w", err)
 	}
 
 	db, err := foundation.New(tracer, args.FDB)
@@ -135,15 +96,7 @@ func Run(ctx context.Context, args *Args) error {
 		log:    log,
 		tracer: tracer,
 
-		cfg: config{
-			signingKey:     signingKey,
-			serviceDID:     args.ServiceDID,
-			hostname:       args.Hostname,
-			userDomains:    args.UserDomains,
-			contactEmail:   args.ContactEmail,
-			privacyPolicy:  args.PrivacyPolicy,
-			termsOfService: args.TermsOfService,
-		},
+		hosts: hosts,
 
 		db: db,
 
@@ -195,7 +148,7 @@ func Run(ctx context.Context, args *Args) error {
 func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Args) error {
 	defer cancel()
 
-	handler := s.observabilityMiddleware(s.router())
+	handler := s.observabilityMiddleware(s.hostMiddleware(s.router()))
 
 	srv := &http.Server{
 		Handler:      handler,

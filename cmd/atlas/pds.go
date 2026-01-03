@@ -10,19 +10,11 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var (
-	defaultSigningKeyPath = "./testdata/jwt-signing-key.pem"
-	defaultServiceDID     = "did:web:dev.atlaspds.net"
-	defaultHostname       = "dev.atlaspds.net"
-	defaultUserDomains    = []string{".dev.atlaspds.net"}
-)
+var defaultConfigFile = "./testdata/config.toml"
 
 func init() {
 	if env.IsProd() {
-		defaultSigningKeyPath = ""
-		defaultServiceDID = ""
-		defaultHostname = ""
-		defaultUserDomains = []string{}
+		defaultConfigFile = ""
 	}
 }
 
@@ -57,52 +49,19 @@ func pdsCmd() *cli.Command {
 				Value: "https://plc.directory",
 			},
 			&cli.StringFlag{
-				Name:  "jwt-signing-key",
-				Usage: "Path to EC private key file for signing JWTs (PEM format)",
-				Value: defaultSigningKeyPath,
-			},
-			&cli.StringFlag{
-				Name:  "service-did",
-				Usage: "DID of this PDS service (used as 'aud' claim in JWTs)",
-				Value: defaultServiceDID,
-			},
-			&cli.StringFlag{
-				Name:  "hostname",
-				Usage: "Public hostname of this PDS server (used in well-known endpoints)",
-				Value: defaultHostname,
-			},
-			&cli.StringSliceFlag{
-				Name:  "user-domains",
-				Usage: "List of domains on which users are allowed to signup",
-				Value: defaultUserDomains,
-			},
-			&cli.StringFlag{
-				Name:  "contact-email",
-				Usage: "Contact email for the server admin",
-			},
-			&cli.StringFlag{
-				Name:  "privacy-policy",
-				Usage: "Link to the privacy policy document",
-			},
-			&cli.StringFlag{
-				Name:  "terms-of-service",
-				Usage: "Link to the terms of service document",
+				Name:  "config",
+				Usage: "Path to TOML config file containing PDS host configurations",
+				Value: defaultConfigFile,
 			},
 		),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return pds.Run(ctx, &pds.Args{
-				Addr:           c.String("addr"),
-				MetricsAddr:    c.String("metrics-addr"),
-				ReadTimeout:    c.Duration("read-timeout"),
-				WriteTimeout:   c.Duration("write-timeout"),
-				PLCURL:         c.String("plc"),
-				JWTSigningKey:  c.String("jwt-signing-key"),
-				ServiceDID:     c.String("service-did"),
-				Hostname:       c.String("hostname"),
-				UserDomains:    c.StringSlice("user-domains"),
-				ContactEmail:   c.String("contact-email"),
-				PrivacyPolicy:  c.String("privacy-policy"),
-				TermsOfService: c.String("terms-of-service"),
+				Addr:         c.String("addr"),
+				MetricsAddr:  c.String("metrics-addr"),
+				ReadTimeout:  c.Duration("read-timeout"),
+				WriteTimeout: c.Duration("write-timeout"),
+				PLCURL:       c.String("plc"),
+				ConfigFile:   c.String("config"),
 				FDB: foundation.Config{
 					ClusterFile: c.String("fdb-cluster-file"),
 					APIVersion:  c.Int("fdb-api-version"),

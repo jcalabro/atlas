@@ -10,8 +10,11 @@ import (
 )
 
 func (s *server) handleListRepos(w http.ResponseWriter, r *http.Request) {
-	span := spanFromContext(r.Context())
+	ctx := r.Context()
+	span := spanFromContext(ctx)
 	defer span.End()
+
+	host := hostFromContext(ctx)
 
 	cursor := r.URL.Query().Get("cursor")
 	if cursor != "" {
@@ -30,7 +33,7 @@ func (s *server) handleListRepos(w http.ResponseWriter, r *http.Request) {
 		limit = 500 // set the max scan size
 	}
 
-	actors, next, err := s.db.ListActors(r.Context(), cursor, limit)
+	actors, next, err := s.db.ListActors(ctx, host.hostname, cursor, limit)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to list repos: %w", err))
 		return

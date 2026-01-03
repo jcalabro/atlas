@@ -1,6 +1,7 @@
 package pds
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,13 +10,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func addTestHostContext(srv *server, req *http.Request) *http.Request {
+	ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+	return req.WithContext(ctx)
+}
+
 func TestHandleWellKnown(t *testing.T) {
 	t.Parallel()
 
+	srv := testServer(t)
 	w := httptest.NewRecorder()
-	router := testServer(t).router()
+	router := srv.router()
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/did.json", nil)
+	req = addTestHostContext(srv, req)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -36,11 +44,13 @@ func TestHandleWellKnown(t *testing.T) {
 func TestHandleAtprotoDid_ServerHostname(t *testing.T) {
 	t.Parallel()
 
+	srv := testServer(t)
 	w := httptest.NewRecorder()
-	router := testServer(t).router()
+	router := srv.router()
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/atproto-did", nil)
 	req.Host = "dev.atlaspds.dev"
+	req = addTestHostContext(srv, req)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -51,11 +61,16 @@ func TestHandleAtprotoDid_ServerHostname(t *testing.T) {
 func TestHandleAtprotoDid_InvalidSubdomain(t *testing.T) {
 	t.Parallel()
 
+	srv := testServer(t)
 	w := httptest.NewRecorder()
-	router := testServer(t).router()
+	router := srv.router()
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/atproto-did", nil)
 	req.Host = "other.example.com"
+	// provide a valid hostConfig so the handler doesn't error,
+	// but use a different Host header - this tests the "not found" path
+	ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+	req = req.WithContext(ctx)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNoContent, w.Code)
@@ -64,10 +79,12 @@ func TestHandleAtprotoDid_InvalidSubdomain(t *testing.T) {
 func TestHandleOauthProtectedResource(t *testing.T) {
 	t.Parallel()
 
+	srv := testServer(t)
 	w := httptest.NewRecorder()
-	router := testServer(t).router()
+	router := srv.router()
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-protected-resource", nil)
+	req = addTestHostContext(srv, req)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -87,10 +104,12 @@ func TestHandleOauthProtectedResource(t *testing.T) {
 func TestHandleOauthAuthorizationServer(t *testing.T) {
 	t.Parallel()
 
+	srv := testServer(t)
 	w := httptest.NewRecorder()
-	router := testServer(t).router()
+	router := srv.router()
 
 	req := httptest.NewRequest(http.MethodGet, "/.well-known/oauth-authorization-server", nil)
+	req = addTestHostContext(srv, req)
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)

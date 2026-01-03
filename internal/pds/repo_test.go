@@ -27,6 +27,7 @@ func TestHandleListRepos(t *testing.T) {
 			Did:           fmt.Sprintf("%s%03d", prefix, i),
 			Email:         fmt.Sprintf("testrepos%d@example.com", i),
 			Handle:        fmt.Sprintf("testrepos%d.dev.atlaspds.net", i),
+			PdsHost:       testPDSHost,
 			CreatedAt:     timestamppb.New(time.Now()),
 			PasswordHash:  fmt.Appendf(nil, "hash%d", i),
 			SigningKey:    fmt.Appendf(nil, "key%d", i),
@@ -43,6 +44,7 @@ func TestHandleListRepos(t *testing.T) {
 		w := httptest.NewRecorder()
 		// query starting from our test prefix
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/xrpc/com.atproto.sync.listRepos?cursor=%s000&limit=3", prefix), nil)
+		req = addTestHostContext(srv, req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -78,6 +80,7 @@ func TestHandleListRepos(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/xrpc/com.atproto.sync.listRepos?cursor=%s000&limit=2", prefix), nil)
+		req = addTestHostContext(srv, req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -96,6 +99,7 @@ func TestHandleListRepos(t *testing.T) {
 		// first request with limit 2
 		w1 := httptest.NewRecorder()
 		req1 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/xrpc/com.atproto.sync.listRepos?cursor=%s000&limit=2", prefix), nil)
+		req1 = addTestHostContext(srv, req1)
 		router.ServeHTTP(w1, req1)
 
 		require.Equal(t, http.StatusOK, w1.Code)
@@ -109,6 +113,7 @@ func TestHandleListRepos(t *testing.T) {
 		// second request using the cursor from first request
 		w2 := httptest.NewRecorder()
 		req2 := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/xrpc/com.atproto.sync.listRepos?cursor=%s&limit=2", *out1.Cursor), nil)
+		req2 = addTestHostContext(srv, req2)
 		router.ServeHTTP(w2, req2)
 
 		require.Equal(t, http.StatusOK, w2.Code)
@@ -127,6 +132,7 @@ func TestHandleListRepos(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.listRepos?limit=501", nil)
+		req = addTestHostContext(srv, req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -143,6 +149,7 @@ func TestHandleListRepos(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.listRepos?limit=-1", nil)
+		req = addTestHostContext(srv, req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -153,6 +160,7 @@ func TestHandleListRepos(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.listRepos?limit=abc", nil)
+		req = addTestHostContext(srv, req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -163,6 +171,7 @@ func TestHandleListRepos(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.listRepos?cursor=not-a-did", nil)
+		req = addTestHostContext(srv, req)
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)

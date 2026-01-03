@@ -17,12 +17,20 @@ import (
 )
 
 type actorContextKey struct{}
+type hostContextKey struct{}
 type spanContextKey struct{}
 type tokenContextKey struct{}
 
 func actorFromContext(ctx context.Context) *types.Actor {
 	if actor, ok := ctx.Value(actorContextKey{}).(*types.Actor); ok {
 		return actor
+	}
+	return nil
+}
+
+func hostFromContext(ctx context.Context) *loadedHostConfig {
+	if cfg, ok := ctx.Value(hostContextKey{}).(*loadedHostConfig); ok {
+		return cfg
 	}
 	return nil
 }
@@ -103,16 +111,39 @@ func (s *server) observabilityMiddleware(next http.Handler) http.Handler {
 		}
 
 		status := strconv.Itoa(rw.status)
-		requests.WithLabelValues(env.Version, serviceName, r.URL.Path, r.Method, status).Inc()
-		requestDuration.WithLabelValues(serviceName, r.URL.Path, r.Method, status).Observe(duration)
+		requests.WithLabelValues(env.Version, serviceName, r.Host, r.URL.Path, r.Method, status).Inc()
+		requestDuration.WithLabelValues(serviceName, r.Host, r.URL.Path, r.Method, status).Observe(duration)
 
 		s.log.Debug("request completed",
+			slog.String("host", r.Host),
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.Int("status", rw.status),
 			slog.Int("response_size", rw.size),
 			slog.Float64("duration_seconds", duration),
 		)
+	})
+}
+
+// hostMiddleware validates the Host header against configured PDS hosts
+// and stores the host configuration in the request context.
+func (s *server) hostMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		header := r.Host
+
+		// strip port if present
+		if idx := strings.LastIndex(header, ":"); idx != -1 {
+			header = header[:idx]
+		}
+
+		host, ok := s.hosts[header]
+		if !ok {
+			s.notFound(w, fmt.Errorf("host %q not found", header))
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), hostContextKey{}, host)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -158,6 +189,14 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 		if actor == nil {
 			s.err(w, http.StatusUnauthorized, fmt.Errorf("actor not found"))
+			return
+		}
+
+		// verify the actor belongs to the requested PDS host
+		host := hostFromContext(ctx)
+		if actor.PdsHost != host.hostname {
+			s.log.Debug("actor pds_host mismatch", "actor_host", actor.PdsHost, "request_host", host.hostname)
+			s.err(w, http.StatusUnauthorized, fmt.Errorf("actor not found on this host"))
 			return
 		}
 

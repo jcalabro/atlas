@@ -20,6 +20,8 @@ var (
 	testDB    *foundation.DB
 )
 
+const testPDSHost = "dev.atlaspds.dev"
+
 func testServer(t *testing.T) *server {
 	tracer := otel.Tracer("test")
 
@@ -42,14 +44,16 @@ func testServer(t *testing.T) *server {
 		log:    slog.Default(),
 		tracer: otel.Tracer("test"),
 
-		cfg: config{
-			signingKey:     signingKey,
-			serviceDID:     "did:web:dev.atlaspds.dev",
-			hostname:       "dev.atlaspds.dev",
-			userDomains:    []string{".dev.atlaspds.dev"},
-			contactEmail:   "webmaster@dev.atlaspds.dev",
-			privacyPolicy:  "https://dev.atlaspds.dev/privacy",
-			termsOfService: "https://dev.atlaspds.dev/tos",
+		hosts: map[string]*loadedHostConfig{
+			testPDSHost: {
+				hostname:       testPDSHost,
+				signingKey:     signingKey,
+				serviceDID:     "did:web:dev.atlaspds.dev",
+				userDomains:    []string{".dev.atlaspds.dev"},
+				contactEmail:   "webmaster@dev.atlaspds.dev",
+				privacyPolicy:  "https://dev.atlaspds.dev/privacy",
+				termsOfService: "https://dev.atlaspds.dev/tos",
+			},
 		},
 
 		db: testDB,

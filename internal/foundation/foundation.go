@@ -22,9 +22,22 @@ type DB struct {
 	tracer trace.Tracer
 	db     *fdb.Database
 
-	actors       directory.DirectorySubspace
-	didsByEmail  directory.DirectorySubspace
+	// The collection of users on each logical PDS and its secondary indicies
+	actors actors
+}
+
+type actors struct {
+	// Primary index. Actors are keyed by DID (globally unique)
+	actors directory.DirectorySubspace
+
+	// Secondary index. Handles are globally unique since they resolve to a single DID
 	didsByHandle directory.DirectorySubspace
+
+	// Secondary index. Emails are keyed by (pds_host, email) for per-PDS uniqueness
+	didsByEmail directory.DirectorySubspace
+
+	// Secondary index. Allows listing actors by PDS host
+	didsByHost directory.DirectorySubspace
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -54,19 +67,24 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	db.actors, err = directory.CreateOrOpen(db.db, []string{"actors"}, nil)
+	db.actors.actors, err = directory.CreateOrOpen(db.db, []string{"actors"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create actors directory: %w", err)
 	}
 
-	db.didsByEmail, err = directory.CreateOrOpen(db.db, []string{"dids_by_email"}, nil)
+	db.actors.didsByHandle, err = directory.CreateOrOpen(db.db, []string{"dids_by_handle"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dids_by_handle directory: %w", err)
+	}
+
+	db.actors.didsByEmail, err = directory.CreateOrOpen(db.db, []string{"dids_by_email"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dids_by_email directory: %w", err)
 	}
 
-	db.didsByHandle, err = directory.CreateOrOpen(db.db, []string{"dids_by_handle"}, nil)
+	db.actors.didsByHost, err = directory.CreateOrOpen(db.db, []string{"dids_by_host"}, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create dids_by_handle directory: %w", err)
+		return nil, fmt.Errorf("failed to create dids_by_host directory: %w", err)
 	}
 
 	return db, nil
