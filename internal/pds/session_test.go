@@ -85,8 +85,8 @@ func TestCreateSession(t *testing.T) {
 	t.Run("saves refresh token to actor", func(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser456",
-			Email:         "test2@example.com",
-			Handle:        "test2.dev.atlaspds.net",
+			Email:         "testsaverefresh@example.com",
+			Handle:        "testsaverefresh.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -118,8 +118,8 @@ func TestCreateSession(t *testing.T) {
 	t.Run("supports multiple refresh tokens per actor", func(t *testing.T) {
 		actor := &types.Actor{
 			Did:           "did:plc:testuser789",
-			Email:         "test3@example.com",
-			Handle:        "test3.dev.atlaspds.net",
+			Email:         "testmultirefresh@example.com",
+			Handle:        "testmultirefresh.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -267,9 +267,9 @@ func TestVerifyAccessToken(t *testing.T) {
 		t.Parallel()
 
 		actor := &types.Actor{
-			Did:           "did:plc:testuser456",
-			Email:         "test2@example.com",
-			Handle:        "test2.dev.atlaspds.net",
+			Did:           "did:plc:testuser456rejectrefresh",
+			Email:         "testrejectrefresh@example.com",
+			Handle:        "testrejectrefresh.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -437,9 +437,9 @@ func TestVerifyRefreshToken(t *testing.T) {
 		t.Parallel()
 
 		actor := &types.Actor{
-			Did:           "did:plc:testuser456",
-			Email:         "test2@example.com",
-			Handle:        "test2.dev.atlaspds.net",
+			Did:           "did:plc:testuser456rejectaccess",
+			Email:         "testrejectaccess@example.com",
+			Handle:        "testrejectaccess.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),
@@ -488,8 +488,8 @@ func TestVerifyRefreshToken(t *testing.T) {
 
 		actor := &types.Actor{
 			Did:           "did:plc:testuser101112",
-			Email:         "test3@example.com",
-			Handle:        "test3.dev.atlaspds.net",
+			Email:         "testjti@example.com",
+			Handle:        "testjti.dev.atlaspds.net",
 			CreatedAt:     timestamppb.Now(),
 			Active:        true,
 			PasswordHash:  []byte("password_hash"),

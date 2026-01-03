@@ -14,8 +14,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/google/uuid"
 	"github.com/jcalabro/atlas/internal/plc"
+	"github.com/jcalabro/atlas/internal/util"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -53,12 +53,12 @@ func createAccount(t *testing.T, srv *server, input *atproto.ServerCreateAccount
 }
 
 func uniqueEmail() *string {
-	email := fmt.Sprintf("test-%s@example.com", uuid.NewString())
+	email := fmt.Sprintf("test-%s@atlaspds.net", util.RandString(16))
 	return &email
 }
 
 func uniqueHandle() string {
-	return fmt.Sprintf("test-%s.atlaspds.net", strings.ReplaceAll(uuid.NewString(), "-", ""))
+	return fmt.Sprintf("test-%s.atlaspds.net", util.RandString(16))
 }
 
 func TestHandleCreateAccount(t *testing.T) {
@@ -125,7 +125,7 @@ func TestHandleCreateAccount(t *testing.T) {
 	t.Run("normalizes handle to lowercase", func(t *testing.T) {
 		t.Parallel()
 
-		handle := fmt.Sprintf("TEST-%s.AtLaSPDS.net", strings.ReplaceAll(uuid.NewString(), "-", ""))
+		handle := fmt.Sprintf("TEST-%s.AtLaSPDS.net", util.RandString(16))
 		password := "secure-password-123"
 
 		input := atproto.ServerCreateAccount_Input{

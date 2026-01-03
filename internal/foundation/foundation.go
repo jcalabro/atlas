@@ -124,7 +124,7 @@ func readTransaction[T any](db *fdb.Database, fn func(tx fdb.ReadTransaction) (T
 
 // Executes the given anonymous function as a read transaction, then attempts to protobuf unmarshal
 // the resulting `[]byte` in to the given `item`. Returns `false` if the item does not exist in the db.
-func readProto(db *fdb.Database, item proto.Message, fn func(tx fdb.ReadTransaction) ([]byte, error)) (bool, error) {
+func readProto(db *fdb.Database, item proto.Message, fn func(fdb.ReadTransaction) ([]byte, error)) (bool, error) {
 	buf, err := readTransaction(db, fn)
 	if err != nil {
 		return false, err

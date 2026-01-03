@@ -2,6 +2,7 @@ package foundation
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -440,5 +441,304 @@ func TestActorIndexConsistency(t *testing.T) {
 		require.Equal(t, byDID.Email, byHandle.Email)
 		require.Equal(t, byDID.Handle, byEmail.Handle)
 		require.Equal(t, byDID.Handle, byHandle.Handle)
+	})
+}
+
+func TestListActors(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+
+	t.Run("returns all actors when limit exceeds total count", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		// use a unique prefix that's unlikely to conflict
+		prefix := "did:plc:zlist"
+
+		// create 3 actors
+		for i := 1; i <= 3; i++ {
+			actor := &types.Actor{
+				Did:           fmt.Sprintf("%s%03d", prefix, i),
+				Email:         fmt.Sprintf("zlist%d@example.com", i),
+				Handle:        fmt.Sprintf("zlist%d.dev.atlaspds.net", i),
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
+				SigningKey:    fmt.Appendf(nil, "key%d", i),
+				RotationKeys:  [][]byte{fmt.Appendf(nil, "rotation%d", i)},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		// query starting from our prefix
+		actors, nextCursor, err := db.ListActors(ctx, "did:plc:zlist000", 10)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(actors), 3)
+		// verify our actors are in the results
+		require.Equal(t, prefix+"001", actors[0].Did)
+		require.Equal(t, prefix+"002", actors[1].Did)
+		require.Equal(t, prefix+"003", actors[2].Did)
+		// next cursor could be our last actor or something after if there are more
+		_ = nextCursor
+	})
+
+	t.Run("paginates correctly with first page", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		prefix := "did:plc:zzzzzpage"
+
+		// create 5 actors with lexicographically ordered DIDs
+		for i := 1; i <= 5; i++ {
+			actor := &types.Actor{
+				Did:           fmt.Sprintf("%s%03d", prefix, i),
+				Email:         fmt.Sprintf("zzpage%d@example.com", i),
+				Handle:        fmt.Sprintf("zzpage%d.dev.atlaspds.net", i),
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
+				SigningKey:    fmt.Appendf(nil, "key%d", i),
+				RotationKeys:  [][]byte{fmt.Appendf(nil, "rotation%d", i)},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		// fetch first page with limit 2, starting just before our data
+		actors, nextCursor, err := db.ListActors(ctx, prefix+"000", 2)
+		require.NoError(t, err)
+		require.Len(t, actors, 2)
+		require.NotEmpty(t, nextCursor)
+		require.Equal(t, prefix+"001", actors[0].Did)
+		require.Equal(t, prefix+"002", actors[1].Did)
+		require.Equal(t, prefix+"002", nextCursor)
+	})
+
+	t.Run("paginates correctly with middle page", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		prefix := "did:plc:zzzzzmid"
+
+		// create 5 actors
+		for i := 1; i <= 5; i++ {
+			actor := &types.Actor{
+				Did:           fmt.Sprintf("%s%03d", prefix, i),
+				Email:         fmt.Sprintf("zzmid%d@example.com", i),
+				Handle:        fmt.Sprintf("zzmid%d.dev.atlaspds.net", i),
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
+				SigningKey:    fmt.Appendf(nil, "key%d", i),
+				RotationKeys:  [][]byte{fmt.Appendf(nil, "rotation%d", i)},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		// fetch second page with cursor
+		actors, nextCursor, err := db.ListActors(ctx, prefix+"002", 2)
+		require.NoError(t, err)
+		require.Len(t, actors, 2)
+		require.NotEmpty(t, nextCursor)
+		require.Equal(t, prefix+"003", actors[0].Did)
+		require.Equal(t, prefix+"004", actors[1].Did)
+		require.Equal(t, prefix+"004", nextCursor)
+	})
+
+	t.Run("paginates correctly with last page", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		prefix := "did:plc:zzzzzlast"
+
+		// create 5 actors
+		for i := 1; i <= 5; i++ {
+			actor := &types.Actor{
+				Did:           fmt.Sprintf("%s%03d", prefix, i),
+				Email:         fmt.Sprintf("zzlast%d@example.com", i),
+				Handle:        fmt.Sprintf("zzlast%d.dev.atlaspds.net", i),
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
+				SigningKey:    fmt.Appendf(nil, "key%d", i),
+				RotationKeys:  [][]byte{fmt.Appendf(nil, "rotation%d", i)},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		// fetch last page - should have our last actor
+		actors, _, err := db.ListActors(ctx, prefix+"004", 2)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(actors), 1)
+		require.Equal(t, prefix+"005", actors[0].Did)
+	})
+
+	t.Run("works with limit of 1", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		prefix := "did:plc:zzzzzone"
+
+		// create 3 actors
+		for i := 1; i <= 3; i++ {
+			actor := &types.Actor{
+				Did:           fmt.Sprintf("%s%03d", prefix, i),
+				Email:         fmt.Sprintf("zzone%d@example.com", i),
+				Handle:        fmt.Sprintf("zzone%d.dev.atlaspds.net", i),
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
+				SigningKey:    fmt.Appendf(nil, "key%d", i),
+				RotationKeys:  [][]byte{fmt.Appendf(nil, "rotation%d", i)},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		actors, nextCursor, err := db.ListActors(ctx, prefix+"000", 1)
+		require.NoError(t, err)
+		require.Len(t, actors, 1)
+		require.NotEmpty(t, nextCursor)
+		require.Equal(t, prefix+"001", actors[0].Did)
+		require.Equal(t, prefix+"001", nextCursor)
+	})
+
+	t.Run("actors are returned in lexicographic DID order", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		prefix := "did:plc:zzzzzord"
+
+		// create actors with non-sequential suffixes
+		dids := []string{prefix + "zzz", prefix + "aaa", prefix + "mmm"}
+		for _, did := range dids {
+			actor := &types.Actor{
+				Did:           did,
+				Email:         did + "@example.com",
+				Handle:        did + ".dev.atlaspds.net",
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  []byte("hash"),
+				SigningKey:    []byte("key"),
+				RotationKeys:  [][]byte{[]byte("rotation")},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		actors, _, err := db.ListActors(ctx, prefix+"000", 10)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(actors), 3)
+		// verify our actors are returned in lexicographic order
+		require.Equal(t, prefix+"aaa", actors[0].Did)
+		require.Equal(t, prefix+"mmm", actors[1].Did)
+		require.Equal(t, prefix+"zzz", actors[2].Did)
+	})
+
+	t.Run("handles cursor beyond last actor", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		prefix := "did:plc:zzzzzbeyond"
+
+		// create actors
+		for i := 1; i <= 3; i++ {
+			actor := &types.Actor{
+				Did:           fmt.Sprintf("%s%03d", prefix, i),
+				Email:         fmt.Sprintf("zzbeyond%d@example.com", i),
+				Handle:        fmt.Sprintf("zzbeyond%d.dev.atlaspds.net", i),
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
+				SigningKey:    fmt.Appendf(nil, "key%d", i),
+				RotationKeys:  [][]byte{fmt.Appendf(nil, "rotation%d", i)},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		// use a cursor beyond our last actor
+		actors, nextCursor, err := db.ListActors(ctx, prefix+"999", 10)
+		require.NoError(t, err)
+		// no actors from our test set, but there could be other actors in the shared DB
+		for _, a := range actors {
+			require.NotContains(t, a.Did, prefix, "should not contain any of our test actors")
+		}
+		_ = nextCursor
+	})
+
+	t.Run("full pagination walkthrough", func(t *testing.T) {
+		t.Parallel()
+		ctx := context.Background()
+
+		prefix := "did:plc:zzzzzwalk"
+
+		// create 7 actors
+		expectedDIDs := make([]string, 7)
+		for i := 1; i <= 7; i++ {
+			did := fmt.Sprintf("%s%03d", prefix, i)
+			expectedDIDs[i-1] = did
+			actor := &types.Actor{
+				Did:           did,
+				Email:         fmt.Sprintf("zzwalk%d@example.com", i),
+				Handle:        fmt.Sprintf("zzwalk%d.dev.atlaspds.net", i),
+				CreatedAt:     timestamppb.New(time.Now()),
+				PasswordHash:  fmt.Appendf(nil, "hash%d", i),
+				SigningKey:    fmt.Appendf(nil, "key%d", i),
+				RotationKeys:  [][]byte{fmt.Appendf(nil, "rotation%d", i)},
+				RefreshTokens: []*types.RefreshToken{},
+			}
+			err := db.SaveActor(ctx, actor)
+			require.NoError(t, err)
+		}
+
+		var ourActors []*types.Actor
+		cursor := prefix + "000" // start just before our actors
+		pageSize := int64(3)
+
+		// page 1: actors 0,1,2
+		actors, nextCursor, err := db.ListActors(ctx, cursor, pageSize)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(actors), 3)
+		require.NotEmpty(t, nextCursor)
+		// collect only our actors
+		for _, a := range actors {
+			if len(ourActors) < 3 && a.Did >= prefix+"001" && a.Did <= prefix+"999" {
+				ourActors = append(ourActors, a)
+			}
+		}
+		cursor = nextCursor
+
+		// page 2: actors 3,4,5
+		actors, nextCursor, err = db.ListActors(ctx, cursor, pageSize)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(actors), 1)
+		require.NotEmpty(t, nextCursor)
+		// collect only our actors
+		for _, a := range actors {
+			if len(ourActors) < 6 && a.Did >= prefix+"001" && a.Did <= prefix+"999" {
+				ourActors = append(ourActors, a)
+			}
+		}
+		cursor = nextCursor
+
+		// page 3: actor 6 (last page, only 1 actor from our set)
+		actors, _, err = db.ListActors(ctx, cursor, pageSize)
+		require.NoError(t, err)
+		// collect only our actors
+		for _, a := range actors {
+			if len(ourActors) < 7 && a.Did >= prefix+"001" && a.Did <= prefix+"999" {
+				ourActors = append(ourActors, a)
+			}
+		}
+
+		// verify we got all 7 actors in order
+		require.Len(t, ourActors, 7)
+		for i, actor := range ourActors {
+			require.Equal(t, expectedDIDs[i], actor.Did)
+		}
 	})
 }

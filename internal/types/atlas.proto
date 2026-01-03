@@ -21,6 +21,8 @@ message Actor {
   bool active = 9;
   repeated bytes rotation_keys = 10;
   repeated RefreshToken refresh_tokens = 11;
+  string head = 12;
+  string rev = 13;
 }
 
 message RefreshToken {

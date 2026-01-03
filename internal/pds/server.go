@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -269,6 +270,22 @@ func (s *server) err(w http.ResponseWriter, code int, err error) {
 	})
 }
 
+func parseIntParam(r *http.Request, name string, defaultVal int64) (int64, error) {
+	str := r.URL.Query().Get(name)
+	if str == "" {
+		return defaultVal, nil
+	}
+
+	return strconv.ParseInt(str, 10, 64)
+}
+
+func nextCursorOrNil(cursor string) *string {
+	if cursor == "" {
+		return nil
+	}
+	return &cursor
+}
+
 func (s *server) router() *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -299,6 +316,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createSession", s.handleCreateSession)
+	mux.HandleFunc("GET /xrpc/com.atproto.sync.listRepos", s.handleListRepos)
 
 	// authed
 	mux.HandleFunc("GET /xrpc/com.atproto.server.getSession", s.authMiddleware(s.handleGetSession))
