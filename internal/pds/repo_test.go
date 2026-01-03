@@ -3,9 +3,6 @@ package pds
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,7 +13,6 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -25,7 +21,6 @@ func TestComputeCID(t *testing.T) {
 
 	t.Run("deterministic", func(t *testing.T) {
 		t.Parallel()
-
 		input := []byte(`{"$type":"app.bsky.feed.post","text":"hello"}`)
 
 		cid1, err := computeCID(input)
@@ -39,7 +34,6 @@ func TestComputeCID(t *testing.T) {
 
 	t.Run("different inputs produce different CIDs", func(t *testing.T) {
 		t.Parallel()
-
 		cid1, err := computeCID([]byte(`{"text":"hello"}`))
 		require.NoError(t, err)
 
@@ -51,7 +45,6 @@ func TestComputeCID(t *testing.T) {
 
 	t.Run("produces CIDv1 with dag-cbor codec", func(t *testing.T) {
 		t.Parallel()
-
 		c, err := computeCID([]byte(`{"test":"data"}`))
 		require.NoError(t, err)
 
@@ -230,56 +223,14 @@ func TestHandleListRepos(t *testing.T) {
 
 func TestHandleCreateRecord(t *testing.T) {
 	t.Parallel()
-	ctx := t.Context()
-
-	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
 	srv := testServer(t)
-	srv.hosts[testPDSHost].signingKey = signingKey
-	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
 
-	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
-
-	// helper to create an authenticated actor
-	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
-		require.NoError(t, err)
-
-		actor := &types.Actor{
-			Did:           did,
-			Email:         email,
-			Handle:        handle,
-			PdsHost:       testPDSHost,
-			CreatedAt:     timestamppb.Now(),
-			PasswordHash:  pwHash,
-			SigningKey:    []byte("test-signing-key"),
-			RotationKeys:  [][]byte{[]byte("test-rotation-key")},
-			RefreshTokens: []*types.RefreshToken{},
-			Active:        true,
-		}
-
-		err = srv.db.SaveActor(ctx, actor)
-		require.NoError(t, err)
-
-		session, err := srv.createSession(hostCtx, actor)
-		require.NoError(t, err)
-
-		return actor, session
-	}
-
-	// helper to add auth and host context to requests
-	addAuthContext := func(req *http.Request, actor *types.Actor, accessToken string) *http.Request {
-		req.Header.Set("Authorization", "Bearer "+accessToken)
-		ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
-		ctx = context.WithValue(ctx, actorContextKey{}, actor)
-		return req.WithContext(ctx)
-	}
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
 
 	t.Run("success - creates record with generated rkey", func(t *testing.T) {
 		t.Parallel()
 
-		actor, session := setupTestActor("did:plc:createrecord1", "create1@example.com", "create1.dev.atlaspds.dev")
+		actor, session := setupTestActor(t, srv, "did:plc:createrecord1", "create1@example.com", "create1.dev.atlaspds.dev")
 
 		input := map[string]any{
 			"repo":       actor.Did,
@@ -296,7 +247,7 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req = addAuthContext(req, actor, session.AccessToken)
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
 		srv.handleCreateRecord(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -314,7 +265,7 @@ func TestHandleCreateRecord(t *testing.T) {
 	t.Run("success - creates record with specified rkey", func(t *testing.T) {
 		t.Parallel()
 
-		actor, session := setupTestActor("did:plc:createrecord2", "create2@example.com", "create2.dev.atlaspds.dev")
+		actor, session := setupTestActor(t, srv, "did:plc:createrecord2", "create2@example.com", "create2.dev.atlaspds.dev")
 
 		customTID, err := srv.db.NextTID(ctx, actor.Did)
 		require.NoError(t, err)
@@ -335,7 +286,7 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req = addAuthContext(req, actor, session.AccessToken)
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
 		srv.handleCreateRecord(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -350,7 +301,7 @@ func TestHandleCreateRecord(t *testing.T) {
 	t.Run("success - record can be retrieved after creation", func(t *testing.T) {
 		t.Parallel()
 
-		actor, session := setupTestActor("did:plc:createrecord3", "create3@example.com", "create3.dev.atlaspds.dev")
+		actor, session := setupTestActor(t, srv, "did:plc:createrecord3", "create3@example.com", "create3.dev.atlaspds.dev")
 
 		tid, err := srv.db.NextTID(ctx, actor.Did)
 		require.NoError(t, err)
@@ -370,7 +321,7 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req = addAuthContext(req, actor, session.AccessToken)
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
 		srv.handleCreateRecord(w, req)
 
 		require.Equal(t, http.StatusOK, w.Code)
@@ -388,7 +339,7 @@ func TestHandleCreateRecord(t *testing.T) {
 	t.Run("error - repo mismatch", func(t *testing.T) {
 		t.Parallel()
 
-		actor, session := setupTestActor("did:plc:createrecord4", "create4@example.com", "create4.dev.atlaspds.dev")
+		actor, session := setupTestActor(t, srv, "did:plc:createrecord4", "create4@example.com", "create4.dev.atlaspds.dev")
 
 		input := map[string]any{
 			"repo":       "did:plc:someoneelse",
@@ -404,16 +355,16 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req = addAuthContext(req, actor, session.AccessToken)
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
 		srv.handleCreateRecord(w, req)
 
-		require.Equal(t, http.StatusBadRequest, w.Code)
+		require.Equal(t, http.StatusForbidden, w.Code)
 	})
 
 	t.Run("error - invalid collection NSID", func(t *testing.T) {
 		t.Parallel()
 
-		actor, session := setupTestActor("did:plc:createrecord5", "create5@example.com", "create5.dev.atlaspds.dev")
+		actor, session := setupTestActor(t, srv, "did:plc:createrecord5", "create5@example.com", "create5.dev.atlaspds.dev")
 
 		input := map[string]any{
 			"repo":       actor.Did,
@@ -429,7 +380,7 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req = addAuthContext(req, actor, session.AccessToken)
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
 		srv.handleCreateRecord(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -438,7 +389,7 @@ func TestHandleCreateRecord(t *testing.T) {
 	t.Run("error - invalid rkey", func(t *testing.T) {
 		t.Parallel()
 
-		actor, session := setupTestActor("did:plc:createrecord6", "create6@example.com", "create6.dev.atlaspds.dev")
+		actor, session := setupTestActor(t, srv, "did:plc:createrecord6", "create6@example.com", "create6.dev.atlaspds.dev")
 
 		input := map[string]any{
 			"repo":       actor.Did,
@@ -455,7 +406,7 @@ func TestHandleCreateRecord(t *testing.T) {
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req = addAuthContext(req, actor, session.AccessToken)
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
 		srv.handleCreateRecord(w, req)
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
@@ -464,7 +415,7 @@ func TestHandleCreateRecord(t *testing.T) {
 	t.Run("error - duplicate record", func(t *testing.T) {
 		t.Parallel()
 
-		actor, session := setupTestActor("did:plc:createrecord7", "create7@example.com", "create7.dev.atlaspds.dev")
+		actor, session := setupTestActor(t, srv, "did:plc:createrecord7", "create7@example.com", "create7.dev.atlaspds.dev")
 
 		tid, err := srv.db.NextTID(ctx, actor.Did)
 		require.NoError(t, err)
@@ -486,16 +437,16 @@ func TestHandleCreateRecord(t *testing.T) {
 		// first request should succeed
 		w1 := httptest.NewRecorder()
 		req1 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req1 = addAuthContext(req1, actor, session.AccessToken)
+		req1 = addAuthContext(t, ctx, srv, req1, actor, session.AccessToken)
 		srv.handleCreateRecord(w1, req1)
 		require.Equal(t, http.StatusOK, w1.Code)
 
 		// second request with same rkey should fail
 		w2 := httptest.NewRecorder()
 		req2 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
-		req2 = addAuthContext(req2, actor, session.AccessToken)
+		req2 = addAuthContext(t, ctx, srv, req2, actor, session.AccessToken)
 		srv.handleCreateRecord(w2, req2)
-		require.Equal(t, http.StatusBadRequest, w2.Code)
+		require.Equal(t, http.StatusConflict, w2.Code)
 	})
 
 	t.Run("error - no auth", func(t *testing.T) {

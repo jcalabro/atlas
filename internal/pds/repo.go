@@ -101,11 +101,11 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 
 	// verify the repo matches the authenticated user
 	if in.Repo != actor.Did && in.Repo != actor.Handle {
-		s.badRequest(w, fmt.Errorf("repo must match authenticated user"))
+		s.forbidden(w, fmt.Errorf("repo must match authenticated user"))
 		return
 	}
 
-	// validate collection is a valid NSID
+	// verify the collection is a valid NSID
 	if _, err := syntax.ParseNSID(in.Collection); err != nil {
 		s.badRequest(w, fmt.Errorf("invalid collection NSID: %w", err))
 		return
@@ -124,7 +124,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		// generate a TID-based rkey using distributed counter
 		tid, err := s.db.NextTID(ctx, actor.Did)
 		if err != nil {
-			s.internalErr(w, fmt.Errorf("failed to generate TID: %w", err))
+			s.internalErr(w, fmt.Errorf("failed to generate tid: %w", err))
 			return
 		}
 		rkey = tid.String()
@@ -138,7 +138,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing != nil {
-		s.badRequest(w, fmt.Errorf("record already exists at %s/%s", in.Collection, rkey))
+		s.conflict(w, fmt.Errorf("record already exists"))
 		return
 	}
 
@@ -178,14 +178,13 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:  timestamppb.Now(),
 	}
 
-	// save record to FDB
 	if err := s.db.SaveRecord(ctx, record); err != nil {
 		s.internalErr(w, fmt.Errorf("failed to save record: %w", err))
 		return
 	}
 
 	// return response
-	// NOTE: we're not updating the repo commit yet - that will come with full MST support
+	// @NOTE (jrc): we're not updating the repo commit yet - that will come with full MST support
 	resp := atproto.RepoCreateRecord_Output{
 		Uri:              uri,
 		Cid:              recordCID.String(),

@@ -205,16 +205,24 @@ func (s *server) badRequest(w http.ResponseWriter, err error) {
 	s.err(w, http.StatusBadRequest, err)
 }
 
+func (s *server) unauthorized(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusUnauthorized, err)
+}
+
+func (s *server) forbidden(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusForbidden, err)
+}
+
 func (s *server) notFound(w http.ResponseWriter, err error) {
 	s.err(w, http.StatusNotFound, err)
 }
 
-func (s *server) internalErr(w http.ResponseWriter, err error) {
-	s.err(w, http.StatusInternalServerError, err)
+func (s *server) conflict(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusConflict, err)
 }
 
-func (s *server) unauthorized(w http.ResponseWriter, err error) {
-	s.err(w, http.StatusUnauthorized, err)
+func (s *server) internalErr(w http.ResponseWriter, err error) {
+	s.err(w, http.StatusInternalServerError, err)
 }
 
 func (s *server) err(w http.ResponseWriter, code int, err error) {
