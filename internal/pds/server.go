@@ -310,18 +310,22 @@ func (s *server) router() *http.ServeMux {
 	// XRPC routes
 	//
 
-	// unauthed
+	// server management
 	mux.HandleFunc("GET /xrpc/_health", s.handleHealth)
 	mux.HandleFunc("GET /xrpc/com.atproto.server.describeServer", s.handleDescribeServer)
+
+	// accounts
 	mux.HandleFunc("GET /xrpc/com.atproto.identity.resolveHandle", s.handleResolveHandle)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)
-	mux.HandleFunc("POST /xrpc/com.atproto.server.createSession", s.handleCreateSession)
-	mux.HandleFunc("GET /xrpc/com.atproto.sync.listRepos", s.handleListRepos)
 
-	// authed
+	// sessions
+	mux.HandleFunc("POST /xrpc/com.atproto.server.createSession", s.handleCreateSession)
 	mux.HandleFunc("GET /xrpc/com.atproto.server.getSession", s.authMiddleware(s.handleGetSession))
 	mux.HandleFunc("POST /xrpc/com.atproto.server.refreshSession", s.authMiddleware(s.handleRefreshSession))
 	mux.HandleFunc("POST /xrpc/com.atproto.server.deleteSession", s.authMiddleware(s.handleDeleteSession))
+
+	// repos
+	mux.HandleFunc("GET /xrpc/com.atproto.sync.listRepos", s.handleListRepos)
 
 	return mux
 }
