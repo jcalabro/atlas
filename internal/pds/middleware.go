@@ -16,13 +16,29 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+type actorContextKey struct{}
 type spanContextKey struct{}
+type tokenContextKey struct{}
+
+func actorFromContext(ctx context.Context) *types.Actor {
+	if actor, ok := ctx.Value(actorContextKey{}).(*types.Actor); ok {
+		return actor
+	}
+	return nil
+}
 
 func spanFromContext(ctx context.Context) trace.Span {
 	if span, ok := ctx.Value(spanContextKey{}).(trace.Span); ok {
 		return span
 	}
 	return trace.SpanFromContext(ctx)
+}
+
+func tokenFromContext(ctx context.Context) string {
+	if token, ok := ctx.Value(tokenContextKey{}).(string); ok {
+		return token
+	}
+	return ""
 }
 
 type responseWriter struct {
@@ -98,23 +114,6 @@ func (s *server) observabilityMiddleware(next http.Handler) http.Handler {
 			slog.Float64("duration_seconds", duration),
 		)
 	})
-}
-
-type actorContextKey struct{}
-type tokenContextKey struct{}
-
-func actorFromContext(ctx context.Context) *types.Actor {
-	if actor, ok := ctx.Value(actorContextKey{}).(*types.Actor); ok {
-		return actor
-	}
-	return nil
-}
-
-func tokenFromContext(ctx context.Context) string {
-	if token, ok := ctx.Value(tokenContextKey{}).(string); ok {
-		return token
-	}
-	return ""
 }
 
 // authMiddleware extracts and verifies the JWT from the Authorization header
