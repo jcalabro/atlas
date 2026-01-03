@@ -34,12 +34,21 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
 - **cmd/atlas/main.go**: CLI entry point using urfave/cli with the following commands:
   - `pds`: Runs the PDS webserver
   - `--help`: Displays the help command and exits
-- **internal/at/**: Functions and types that allow us to interface with ATProto
 - **internal/env/**: Environment configuration and version handling
-- **internal/foundation/**: FoundationDB client initialization and configuration
+- **internal/foundation/**: FoundationDB client initialization and configuration. Think of this as an ORM for foundationdb.
 - **internal/metrics/**: Prometheus metrics and OpenTelemetry tracing setup
-- **internal/pds/**: HTTP server that implements the ATProto PDS XRPC interface
+- **internal/pds/**: HTTP server that implements the ATProto PDS XRPC interface. This is where the PDS business logic lives.
+- **internal/plc/**: Implements a HTTP client for `plc.directory`, one of the main DID identity systems for atproto. Includes a mock client for tests.
 - **internal/types/**: Protobuf generated types
+- **internal/util**: Small utility helpers. We really try to avoid putting stuff in here as much as possible.
+
+## System Design
+
+Atlas PDS is designed as a robust, multi-tennant, high availability, high-scale PDS. It is written in go, uses foundationdb for storage, and is designed to be horizontally scalable (i.e. we will be running many PDS processes to form a single logical server).
+
+We say it's multi-tennant because we are designing it to host multiple logical hostnames. Bluesky itself currently has about 100 real-world PDSes deployed, and we would like to re-home them all to a single Atlas PDS instance, but keep all the existing hostnames. This means that we frequently observe the HTTP `Host` header to inform query decisions. For instance, if a user is hosted on `a.atlaspds.net`, their data should never appear in queries to `b.atlaspds.net`. This will allow us to seamlessly migrate existing users from the existing PDS implementation to the new Atlas PDS.
+
+We say it's high availability because the system is designed to be run with multiple pods. It's basically a stateless HTTP/XRPC/Websocket server, and we run many horizontally scalable instances of it. Because of this, it's important that we don't make any architecture decisions that limit our ability to horizontally scale, and all server instances must provide a consistent view of the data.
 
 ## Key Patterns
 
@@ -56,6 +65,7 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
 ## Style
 
 - We write relatively basic, straightforward go. We try not to get fancy.
+- In general, we prefer not to add new library dependencies, though sometimes it's unavoidable. Please always check before attempting to add a library to the `go.mod` file. We are trying to keep our dependencies to a minimum.
 - We don't add too many comments, especially in the middle of functions. However, we always document user-facing APIs with godoc style comments (i.e. public types we expect others to import)
 - Comments that occur in the middle of functions should be `// lower case` unless they `// Are mutliple sentences. Like this.`
 - Always use `any` instead of `interface{}`. There is a linter rule to validate this.
