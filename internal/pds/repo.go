@@ -11,7 +11,7 @@ import (
 	"github.com/ipfs/go-cid"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
-	mh "github.com/multiformats/go-multihash"
+	"github.com/multiformats/go-multihash"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -64,7 +64,7 @@ func (s *server) handleListRepos(w http.ResponseWriter, r *http.Request) {
 // computeCID computes a CID from CBOR bytes using SHA-256 and dag-cbor codec.
 func computeCID(cborBytes []byte) (cid.Cid, error) {
 	// 0x71 = dag-cbor codec, 0x12 = sha2-256
-	hash, err := mh.Sum(cborBytes, mh.SHA2_256, -1)
+	hash, err := multihash.Sum(cborBytes, multihash.SHA2_256, -1)
 	if err != nil {
 		return cid.Undef, fmt.Errorf("failed to hash cbor: %w", err)
 	}

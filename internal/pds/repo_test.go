@@ -20,6 +20,49 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestComputeCID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("deterministic", func(t *testing.T) {
+		t.Parallel()
+
+		input := []byte(`{"$type":"app.bsky.feed.post","text":"hello"}`)
+
+		cid1, err := computeCID(input)
+		require.NoError(t, err)
+
+		cid2, err := computeCID(input)
+		require.NoError(t, err)
+
+		require.Equal(t, cid1, cid2)
+	})
+
+	t.Run("different inputs produce different CIDs", func(t *testing.T) {
+		t.Parallel()
+
+		cid1, err := computeCID([]byte(`{"text":"hello"}`))
+		require.NoError(t, err)
+
+		cid2, err := computeCID([]byte(`{"text":"world"}`))
+		require.NoError(t, err)
+
+		require.NotEqual(t, cid1, cid2)
+	})
+
+	t.Run("produces CIDv1 with dag-cbor codec", func(t *testing.T) {
+		t.Parallel()
+
+		c, err := computeCID([]byte(`{"test":"data"}`))
+		require.NoError(t, err)
+
+		require.Equal(t, uint64(1), c.Version())
+		require.Equal(t, uint64(0x71), c.Type()) // dag-cbor
+		require.True(t, c.Defined())
+		require.NotEmpty(t, c.String())
+		require.True(t, len(c.String()) > 10) // CIDs are reasonably long
+	})
+}
+
 func TestHandleListRepos(t *testing.T) {
 	t.Parallel()
 	srv := testServer(t)
