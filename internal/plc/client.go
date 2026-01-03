@@ -115,9 +115,7 @@ func CreateDIDCredentials(sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.
 			"atproto": pubsigkey.DIDKey(),
 		},
 		RotationKeys: rotationKeys,
-		AlsoKnownAs: []string{
-			fmt.Sprintf("at://%s", handle),
-		},
+		AlsoKnownAs:  []string{fmt.Sprintf("at://%s", handle)},
 		Services: map[string]OperationService{
 			"atproto_pds": {
 				Type:     "AtprotoPersonalDataServer",

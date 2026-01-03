@@ -472,3 +472,174 @@ func TestHandleCreateRecord(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
+
+func TestHandleGetRecord(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	router := srv.router()
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	// create a test actor and record
+	actor, session := setupTestActor(t, srv, "did:plc:getrecord1", "getrecord1@example.com", "getrecord1.dev.atlaspds.dev")
+
+	// create a record via createRecord endpoint
+	tid, err := srv.db.NextTID(ctx, actor.Did)
+	require.NoError(t, err)
+	rkey := tid.String()
+
+	recordText := "Test record for getRecord"
+	input := map[string]any{
+		"repo":       actor.Did,
+		"collection": "app.bsky.feed.post",
+		"rkey":       rkey,
+		"record": map[string]any{
+			"$type":     "app.bsky.feed.post",
+			"text":      recordText,
+			"createdAt": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	body, err := json.Marshal(input)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+	req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+	srv.handleCreateRecord(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var createOut atproto.RepoCreateRecord_Output
+	err = json.Unmarshal(w.Body.Bytes(), &createOut)
+	require.NoError(t, err)
+	recordCID := createOut.Cid
+
+	t.Run("success - retrieves record by DID", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.getRecord?repo=%s&collection=app.bsky.feed.post&rkey=%s", actor.Did, rkey)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var out struct {
+			Uri   string         `json:"uri"`
+			Cid   string         `json:"cid"`
+			Value map[string]any `json:"value"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, fmt.Sprintf("at://%s/app.bsky.feed.post/%s", actor.Did, rkey), out.Uri)
+		require.Equal(t, recordCID, out.Cid)
+		require.Equal(t, "app.bsky.feed.post", out.Value["$type"])
+		require.Equal(t, recordText, out.Value["text"])
+	})
+
+	t.Run("success - retrieves record with cid parameter", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.getRecord?repo=%s&collection=app.bsky.feed.post&rkey=%s&cid=%s", actor.Did, rkey, recordCID)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out struct {
+			Uri   string         `json:"uri"`
+			Cid   string         `json:"cid"`
+			Value map[string]any `json:"value"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, recordCID, out.Cid)
+	})
+
+	t.Run("error - missing repo parameter", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.getRecord?collection=app.bsky.feed.post&rkey=abc", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - missing collection parameter", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.getRecord?repo=did:plc:test&rkey=abc", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - missing rkey parameter", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.getRecord?repo=did:plc:test&collection=app.bsky.feed.post", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid collection NSID", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.getRecord?repo=did:plc:test&collection=not-valid&rkey=abc", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid rkey", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.getRecord?repo=did:plc:test&collection=app.bsky.feed.post&rkey=invalid/rkey", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - record not found", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.getRecord?repo=did:plc:test&collection=app.bsky.feed.post&rkey=3jui7kd2xxxx2", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("error - wrong cid parameter", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		// use a valid CID format but different from the actual record's CID
+		wrongCID := "bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee"
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.getRecord?repo=%s&collection=app.bsky.feed.post&rkey=%s&cid=%s", actor.Did, rkey, wrongCID)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("error - invalid cid parameter", func(t *testing.T) {
+		t.Parallel()
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.getRecord?repo=%s&collection=app.bsky.feed.post&rkey=%s&cid=not-a-valid-cid", actor.Did, rkey)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+}

@@ -9,11 +9,100 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atdata"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/ipfs/go-cid"
+	"github.com/jcalabro/atlas/internal/at"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
 	"github.com/multiformats/go-multihash"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func (s *server) handleGetRecord(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	span := spanFromContext(ctx)
+	defer span.End()
+
+	repo := r.URL.Query().Get("repo")
+	collection := r.URL.Query().Get("collection")
+	rkey := r.URL.Query().Get("rkey")
+	cidParam := r.URL.Query().Get("cid")
+
+	switch {
+	case repo == "":
+		s.badRequest(w, fmt.Errorf("repo is required"))
+		return
+	case collection == "":
+		s.badRequest(w, fmt.Errorf("collection is required"))
+		return
+	case rkey == "":
+		s.badRequest(w, fmt.Errorf("rkey is required"))
+		return
+	}
+
+	if _, err := syntax.ParseNSID(collection); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid collection NSID: %w", err))
+		return
+	}
+
+	if _, err := syntax.ParseRecordKey(rkey); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid rkey: %w", err))
+		return
+	}
+
+	// resolve repo to DID if it's a handle
+	did := repo
+	if _, err := syntax.ParseDID(repo); err != nil {
+		// not a DID, try to resolve as handle
+		ident, err := s.directory.LookupHandle(ctx, syntax.Handle(repo))
+		if err != nil {
+			s.notFound(w, fmt.Errorf("could not resolve handle: %w", err))
+			return
+		}
+		did = ident.DID.String()
+	}
+
+	uri := at.FormatURI(did, collection, rkey)
+
+	record, err := s.db.GetRecord(ctx, uri)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get record: %w", err))
+		return
+	}
+	if record == nil {
+		s.notFound(w, fmt.Errorf("record not found"))
+		return
+	}
+
+	// if cid param provided, verify it matches
+	if cidParam != "" {
+		if _, err := syntax.ParseCID(cidParam); err != nil {
+			s.badRequest(w, fmt.Errorf("invalid cid: %w", err))
+			return
+		}
+		if record.Cid != cidParam {
+			s.notFound(w, fmt.Errorf("record not found with specified cid"))
+			return
+		}
+	}
+
+	// unmarshal CBOR to JSON-friendly value
+	val, err := atdata.UnmarshalCBOR(record.Value)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to decode record value: %w", err))
+		return
+	}
+
+	type response struct {
+		Uri   string         `json:"uri"`
+		Cid   string         `json:"cid"`
+		Value map[string]any `json:"value"`
+	}
+
+	s.jsonOK(w, response{
+		Uri:   uri,
+		Cid:   record.Cid,
+		Value: val,
+	})
+}
 
 func (s *server) handleListRepos(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -131,7 +220,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// check if record already exists
-	uri := fmt.Sprintf("at://%s/%s/%s", actor.Did, in.Collection, rkey)
+	uri := at.FormatURI(actor.Did, in.Collection, rkey)
 	existing, err := s.db.GetRecord(ctx, uri)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to check existing record: %w", err))

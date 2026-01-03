@@ -11,10 +11,6 @@ type URI struct {
 	Rkey       string `json:"rkey"`
 }
 
-func (u *URI) String() string {
-	return fmt.Sprintf("at://%s/%s/%s", u.Repo, u.Collection, u.Rkey)
-}
-
 // Parses an AT URI to its component parts (i.e. `at://did/collection/rkey`)
 func ParseURI(uri string) (*URI, error) {
 	uri = strings.TrimPrefix(uri, "at://")
@@ -41,4 +37,13 @@ func ParseURI(uri string) (*URI, error) {
 	}
 
 	return u, nil
+}
+
+func (u *URI) String() string {
+	return fmt.Sprintf("at://%s/%s/%s", u.Repo, u.Collection, u.Rkey)
+}
+
+func FormatURI(repo, collection, rkey string) string {
+	u := &URI{Repo: repo, Collection: collection, Rkey: rkey}
+	return u.String()
 }
