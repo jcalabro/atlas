@@ -31,3 +31,13 @@ message RefreshToken {
   google.protobuf.Timestamp created_at = 2;
   google.protobuf.Timestamp expires_at = 3;
 }
+
+// Record represents a single record in a user's repo
+message Record {
+  string did = 1;
+  string collection = 2;  // NSID, e.g. "app.bsky.feed.post"
+  string rkey = 3;        // record key (TID or user-specified)
+  string cid = 4;         // CID of the record content
+  bytes value = 5;        // CBOR-encoded record data
+  google.protobuf.Timestamp created_at = 6;
+}

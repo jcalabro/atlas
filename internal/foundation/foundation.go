@@ -24,6 +24,9 @@ type DB struct {
 
 	// The collection of users on each logical PDS and its secondary indicies
 	actors actors
+
+	// Records stored in user repos
+	records records
 }
 
 type actors struct {
@@ -38,6 +41,11 @@ type actors struct {
 
 	// Secondary index. Allows listing actors by PDS host
 	didsByHost directory.DirectorySubspace
+}
+
+type records struct {
+	// Primary index. Records are keyed by (did, collection, rkey)
+	records directory.DirectorySubspace
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -85,6 +93,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	db.actors.didsByHost, err = directory.CreateOrOpen(db.db, []string{"dids_by_host"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create dids_by_host directory: %w", err)
+	}
+
+	db.records.records, err = directory.CreateOrOpen(db.db, []string{"records"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create records directory: %w", err)
 	}
 
 	return db, nil

@@ -230,6 +230,91 @@ func (x *RefreshToken) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Record represents a single record in a user's repo
+type Record struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Did           string                 `protobuf:"bytes,1,opt,name=did,proto3" json:"did,omitempty"`
+	Collection    string                 `protobuf:"bytes,2,opt,name=collection,proto3" json:"collection,omitempty"` // NSID, e.g. "app.bsky.feed.post"
+	Rkey          string                 `protobuf:"bytes,3,opt,name=rkey,proto3" json:"rkey,omitempty"`             // record key (TID or user-specified)
+	Cid           string                 `protobuf:"bytes,4,opt,name=cid,proto3" json:"cid,omitempty"`               // CID of the record content
+	Value         []byte                 `protobuf:"bytes,5,opt,name=value,proto3" json:"value,omitempty"`           // CBOR-encoded record data
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Record) Reset() {
+	*x = Record{}
+	mi := &file_atlas_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Record) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Record) ProtoMessage() {}
+
+func (x *Record) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Record.ProtoReflect.Descriptor instead.
+func (*Record) Descriptor() ([]byte, []int) {
+	return file_atlas_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Record) GetDid() string {
+	if x != nil {
+		return x.Did
+	}
+	return ""
+}
+
+func (x *Record) GetCollection() string {
+	if x != nil {
+		return x.Collection
+	}
+	return ""
+}
+
+func (x *Record) GetRkey() string {
+	if x != nil {
+		return x.Rkey
+	}
+	return ""
+}
+
+func (x *Record) GetCid() string {
+	if x != nil {
+		return x.Cid
+	}
+	return ""
+}
+
+func (x *Record) GetValue() []byte {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *Record) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 var File_atlas_proto protoreflect.FileDescriptor
 
 const file_atlas_proto_rawDesc = "" +
@@ -258,7 +343,17 @@ const file_atlas_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAtB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
+	"expires_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"\xb1\x01\n" +
+	"\x06Record\x12\x10\n" +
+	"\x03did\x18\x01 \x01(\tR\x03did\x12\x1e\n" +
+	"\n" +
+	"collection\x18\x02 \x01(\tR\n" +
+	"collection\x12\x12\n" +
+	"\x04rkey\x18\x03 \x01(\tR\x04rkey\x12\x10\n" +
+	"\x03cid\x18\x04 \x01(\tR\x03cid\x12\x14\n" +
+	"\x05value\x18\x05 \x01(\fR\x05value\x129\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
 
 var (
 	file_atlas_proto_rawDescOnce sync.Once
@@ -272,22 +367,24 @@ func file_atlas_proto_rawDescGZIP() []byte {
 	return file_atlas_proto_rawDescData
 }
 
-var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_atlas_proto_goTypes = []any{
 	(*Actor)(nil),                 // 0: types.Actor
 	(*RefreshToken)(nil),          // 1: types.RefreshToken
-	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(*Record)(nil),                // 2: types.Record
+	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
 }
 var file_atlas_proto_depIdxs = []int32{
-	2, // 0: types.Actor.created_at:type_name -> google.protobuf.Timestamp
+	3, // 0: types.Actor.created_at:type_name -> google.protobuf.Timestamp
 	1, // 1: types.Actor.refresh_tokens:type_name -> types.RefreshToken
-	2, // 2: types.RefreshToken.created_at:type_name -> google.protobuf.Timestamp
-	2, // 3: types.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // 2: types.RefreshToken.created_at:type_name -> google.protobuf.Timestamp
+	3, // 3: types.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
+	3, // 4: types.Record.created_at:type_name -> google.protobuf.Timestamp
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_atlas_proto_init() }
@@ -301,7 +398,7 @@ func file_atlas_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atlas_proto_rawDesc), len(file_atlas_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

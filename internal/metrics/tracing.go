@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jcalabro/atlas/internal/env"
 	"go.opentelemetry.io/otel"
@@ -13,6 +14,7 @@ import (
 	tracesdk "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
 	"go.opentelemetry.io/otel/trace/noop"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func InitTracing(ctx context.Context, service string) error {
@@ -51,4 +53,12 @@ func NilString(key string, item *string) attribute.KeyValue {
 	}
 
 	return attribute.String(key, val)
+}
+
+func FormatTime(ts time.Time) string {
+	return ts.Format(time.RFC3339)
+}
+
+func FormatPBTime(ts *timestamppb.Timestamp) string {
+	return FormatTime(ts.AsTime())
 }

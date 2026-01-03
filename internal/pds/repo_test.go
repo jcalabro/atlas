@@ -1,6 +1,11 @@
 package pds
 
 import (
+	"bytes"
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +16,7 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -176,5 +182,293 @@ func TestHandleListRepos(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, w.Code)
 		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+	})
+}
+
+func TestHandleCreateRecord(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.hosts[testPDSHost].signingKey = signingKey
+	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
+
+	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
+
+	// helper to create an authenticated actor
+	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:           did,
+			Email:         email,
+			Handle:        handle,
+			PdsHost:       testPDSHost,
+			CreatedAt:     timestamppb.Now(),
+			PasswordHash:  pwHash,
+			SigningKey:    []byte("test-signing-key"),
+			RotationKeys:  [][]byte{[]byte("test-rotation-key")},
+			RefreshTokens: []*types.RefreshToken{},
+			Active:        true,
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		session, err := srv.createSession(hostCtx, actor)
+		require.NoError(t, err)
+
+		return actor, session
+	}
+
+	// helper to add auth and host context to requests
+	addAuthContext := func(req *http.Request, actor *types.Actor, accessToken string) *http.Request {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		ctx := context.WithValue(req.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+		ctx = context.WithValue(ctx, actorContextKey{}, actor)
+		return req.WithContext(ctx)
+	}
+
+	t.Run("success - creates record with generated rkey", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:createrecord1", "create1@example.com", "create1.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Hello, world!",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out atproto.RepoCreateRecord_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.NotEmpty(t, out.Uri)
+		require.NotEmpty(t, out.Cid)
+		require.Contains(t, out.Uri, actor.Did)
+		require.Contains(t, out.Uri, "app.bsky.feed.post")
+	})
+
+	t.Run("success - creates record with specified rkey", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:createrecord2", "create2@example.com", "create2.dev.atlaspds.dev")
+
+		customRkey := nextTID().String() // use unique rkey to avoid collisions with previous test runs
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       customRkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Custom rkey post",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out atproto.RepoCreateRecord_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Contains(t, out.Uri, customRkey)
+	})
+
+	t.Run("success - record can be retrieved after creation", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:createrecord3", "create3@example.com", "create3.dev.atlaspds.dev")
+
+		rkey := nextTID().String() // use unique rkey to avoid collisions with previous test runs
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.like",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":   "app.bsky.feed.like",
+				"subject": map[string]any{"uri": "at://did:plc:other/app.bsky.feed.post/abc", "cid": "bafyrei..."},
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// verify record was saved to DB
+		uri := fmt.Sprintf("at://%s/%s/%s", actor.Did, "app.bsky.feed.like", rkey)
+		record, err := srv.db.GetRecord(ctx, uri)
+		require.NoError(t, err)
+		require.NotNil(t, record)
+		require.Equal(t, actor.Did, record.Did)
+		require.Equal(t, "app.bsky.feed.like", record.Collection)
+		require.Equal(t, rkey, record.Rkey)
+	})
+
+	t.Run("error - repo mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:createrecord4", "create4@example.com", "create4.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       "did:plc:someoneelse",
+			"collection": "app.bsky.feed.post",
+			"record": map[string]any{
+				"$type": "app.bsky.feed.post",
+				"text":  "Trying to post as someone else",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid collection NSID", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:createrecord5", "create5@example.com", "create5.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "not-a-valid-nsid",
+			"record": map[string]any{
+				"$type": "not-a-valid-nsid",
+				"text":  "Invalid collection",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid rkey", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:createrecord6", "create6@example.com", "create6.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       "invalid/rkey/with/slashes",
+			"record": map[string]any{
+				"$type": "app.bsky.feed.post",
+				"text":  "Invalid rkey",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - duplicate record", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:createrecord7", "create7@example.com", "create7.dev.atlaspds.dev")
+
+		rkey := nextTID().String() // use unique rkey to avoid collisions with previous test runs
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "First post",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		// first request should succeed
+		w1 := httptest.NewRecorder()
+		req1 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req1 = addAuthContext(req1, actor, session.AccessToken)
+		srv.handleCreateRecord(w1, req1)
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		// second request with same rkey should fail
+		w2 := httptest.NewRecorder()
+		req2 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req2 = addAuthContext(req2, actor, session.AccessToken)
+		srv.handleCreateRecord(w2, req2)
+		require.Equal(t, http.StatusBadRequest, w2.Code)
+	})
+
+	t.Run("error - no auth", func(t *testing.T) {
+		t.Parallel()
+
+		input := map[string]any{
+			"repo":       "did:plc:noauth",
+			"collection": "app.bsky.feed.post",
+			"record": map[string]any{
+				"$type": "app.bsky.feed.post",
+				"text":  "No auth",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addTestHostContext(srv, req)
+		srv.handleCreateRecord(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }

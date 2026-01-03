@@ -34,6 +34,7 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
 - **cmd/atlas/main.go**: CLI entry point using urfave/cli with the following commands:
   - `pds`: Runs the PDS webserver
   - `--help`: Displays the help command and exits
+- **internal/at/**: AT Protocol utilities, including AT URI parsing and construction
 - **internal/env/**: Environment configuration and version handling
 - **internal/foundation/**: FoundationDB client initialization and configuration. Think of this as an ORM for foundationdb.
 - **internal/metrics/**: Prometheus metrics and OpenTelemetry tracing setup
@@ -68,7 +69,8 @@ We say it's high availability because the system is designed to be run with mult
 
 - We write relatively basic, straightforward go. We try not to get fancy.
 - In general, we prefer not to add new library dependencies, though sometimes it's unavoidable. Please always check before attempting to add a library to the `go.mod` file. We are trying to keep our dependencies to a minimum.
-- We don't add too many comments, especially in the middle of functions. However, we always document user-facing APIs with godoc style comments (i.e. public types we expect others to import)
+- We don't add too many comments, especially in the middle of functions. However, we frequently document user-facing APIs with godoc style comments (i.e. public types we expect others to import) unless it's very obvious what the code is doing
 - Comments that occur in the middle of functions should be `// lower case` unless they `// Are mutliple sentences. Like this.`
+- Comments that are a single sentence should never end in a period
 - Always use `any` instead of `interface{}`. There is a linter rule to validate this.
 - Never use `*.bsky.social` domains/handles. Instead, use `*.dev.atlaspds.net`.
