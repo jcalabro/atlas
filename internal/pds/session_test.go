@@ -1124,3 +1124,402 @@ func TestHandleDeleteSession(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
+
+func TestAuthMiddleware(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	signingKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	srv := testServer(t)
+	srv.cfg.signingKey = signingKey
+	srv.cfg.serviceDID = "did:plc:test-service-12345"
+
+	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            did,
+			Email:          email,
+			Handle:         handle,
+			PasswordHash:   pwHash,
+			EmailConfirmed: true,
+			CreatedAt:      timestamppb.Now(),
+			Active:         true,
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens:  []*types.RefreshToken{},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		session, err := srv.createSession(ctx, actor)
+		require.NoError(t, err)
+
+		return actor, session
+	}
+
+	t.Run("accepts valid access token for access endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		_, session := setupTestActor("did:plc:authmw1", "authmw1@example.com", "authmw1.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("accepts valid refresh token for refresh endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		_, session := setupTestActor("did:plc:authmw2", "authmw2@example.com", "authmw2.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("rejects missing authorization header", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		require.Contains(t, resp["msg"], "missing authorization header")
+	})
+
+	t.Run("rejects malformed authorization header", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name   string
+			header string
+		}{
+			{"no bearer prefix", "token123"},
+			{"wrong prefix", "Basic token123"},
+			{"only bearer", "Bearer"},
+			{"multiple spaces", "Bearer  token  extra"},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				w := httptest.NewRecorder()
+				router := srv.router()
+
+				req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+				req.Header.Set("Authorization", tt.header)
+				router.ServeHTTP(w, req)
+
+				require.Equal(t, http.StatusUnauthorized, w.Code)
+			})
+		}
+	})
+
+	t.Run("rejects malformed token", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer not.a.valid.jwt.token")
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		require.Contains(t, resp["msg"], "invalid or expired token")
+	})
+
+	t.Run("rejects expired access token", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+		expiredTime := now.Add(-1 * time.Hour)
+
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   srv.cfg.serviceDID,
+			"sub":   "did:plc:authmw3",
+			"iat":   expiredTime.UTC().Unix(),
+			"exp":   expiredTime.UTC().Unix(),
+			"jti":   "test-jti-expired",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+accessString)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects access token for refresh endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		_, session := setupTestActor("did:plc:authmw4", "authmw4@example.com", "authmw4.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var resp map[string]any
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		require.Contains(t, resp["msg"], "invalid or expired token")
+	})
+
+	t.Run("rejects refresh token for access endpoint", func(t *testing.T) {
+		t.Parallel()
+
+		_, session := setupTestActor("did:plc:authmw5", "authmw5@example.com", "authmw5.dev.atlaspds.net")
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects token with wrong audience", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   "did:plc:wrong-service",
+			"sub":   "did:plc:authmw6",
+			"iat":   now.UTC().Unix(),
+			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
+			"jti":   "test-jti-wrongaud",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+accessString)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects token signed with wrong key", func(t *testing.T) {
+		t.Parallel()
+
+		wrongKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+
+		now := time.Now()
+
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   srv.cfg.serviceDID,
+			"sub":   "did:plc:authmw7",
+			"iat":   now.UTC().Unix(),
+			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
+			"jti":   "test-jti-wrongkey",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(wrongKey)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+accessString)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("rejects token for non-existent actor", func(t *testing.T) {
+		t.Parallel()
+
+		now := time.Now()
+
+		accessClaims := jwt.MapClaims{
+			"scope": "com.atproto.access",
+			"aud":   srv.cfg.serviceDID,
+			"sub":   "did:plc:nonexistent",
+			"iat":   now.UTC().Unix(),
+			"exp":   now.Add(accessTokenTTL).UTC().Unix(),
+			"jti":   "test-jti-noactor",
+		}
+
+		accessToken := jwt.NewWithClaims(jwt.SigningMethodES256, accessClaims)
+		accessString, err := accessToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.server.getSession", nil)
+		req.Header.Set("Authorization", "Bearer "+accessString)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var resp map[string]any
+		err = json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		require.Contains(t, resp["msg"], "actor not found")
+	})
+
+	t.Run("rejects refresh token not in actor's token list", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:authmw8", "authmw8@example.com", "authmw8.dev.atlaspds.net")
+
+		// remove the refresh token from the actor's list
+		actor.RefreshTokens = []*types.RefreshToken{}
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req.Header.Set("Authorization", "Bearer "+session.RefreshToken)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var resp map[string]any
+		err = json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		require.Contains(t, resp["msg"], "refresh token not found")
+	})
+
+	t.Run("rejects refresh token expired in database but valid JWT", func(t *testing.T) {
+		t.Parallel()
+
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+
+		now := time.Now()
+		expiredTime := now.Add(-1 * time.Hour)
+
+		// create a JWT that is still valid, but expired in the database
+		refreshClaims := jwt.MapClaims{
+			"scope": "com.atproto.refresh",
+			"aud":   srv.cfg.serviceDID,
+			"sub":   "did:plc:authmw9",
+			"iat":   now.UTC().Unix(),
+			"exp":   now.Add(refreshTokenTTL).UTC().Unix(), // JWT not expired
+			"jti":   "test-jti-db-expired",
+		}
+
+		refreshToken := jwt.NewWithClaims(jwt.SigningMethodES256, refreshClaims)
+		refreshString, err := refreshToken.SignedString(signingKey)
+		require.NoError(t, err)
+
+		actor := &types.Actor{
+			Did:            "did:plc:authmw9",
+			Email:          "authmw9@example.com",
+			Handle:         "authmw9.dev.atlaspds.net",
+			PasswordHash:   pwHash,
+			EmailConfirmed: true,
+			CreatedAt:      timestamppb.Now(),
+			Active:         true,
+			SigningKey:     []byte("signing_key"),
+			RotationKeys:   [][]byte{[]byte("rotation_key")},
+			RefreshTokens: []*types.RefreshToken{
+				{
+					Token:     refreshString,
+					CreatedAt: timestamppb.New(now),
+					ExpiresAt: timestamppb.New(expiredTime), // expired in database
+				},
+			},
+		}
+
+		err = srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		router := srv.router()
+
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.server.refreshSession", nil)
+		req.Header.Set("Authorization", "Bearer "+refreshString)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var resp map[string]any
+		err = json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		require.Contains(t, resp["msg"], "refresh token expired")
+	})
+
+	t.Run("sets actor and token in context", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor("did:plc:authmw10", "authmw10@example.com", "authmw10.dev.atlaspds.net")
+
+		// create a handler that checks the context
+		var capturedActor *types.Actor
+		var capturedToken string
+
+		testHandler := srv.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			capturedActor = actorFromContext(r.Context())
+			capturedToken = tokenFromContext(r.Context())
+			w.WriteHeader(http.StatusOK)
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+
+		testHandler(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.NotNil(t, capturedActor)
+		require.Equal(t, actor.Did, capturedActor.Did)
+		require.Equal(t, actor.Handle, capturedActor.Handle)
+		require.Equal(t, session.AccessToken, capturedToken)
+	})
+}
