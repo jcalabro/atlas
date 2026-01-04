@@ -137,3 +137,42 @@ func (s *server) handleGetLatestCommit(w http.ResponseWriter, r *http.Request) {
 		Rev: actor.Rev,
 	})
 }
+
+func (s *server) handleGetRepoStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	span := spanFromContext(ctx)
+	defer span.End()
+
+	did := r.URL.Query().Get("did")
+	if did == "" {
+		s.badRequest(w, fmt.Errorf("did is required"))
+		return
+	}
+
+	if _, err := syntax.ParseDID(did); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid did: %w", err))
+		return
+	}
+
+	actor, err := s.db.GetActorByDID(ctx, did)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
+		return
+	}
+	if actor == nil {
+		s.notFound(w, fmt.Errorf("repo not found"))
+		return
+	}
+
+	out := &atproto.SyncGetRepoStatus_Output{
+		Did:    actor.Did,
+		Active: actor.Active,
+	}
+
+	// only include rev if active
+	if actor.Active {
+		out.Rev = &actor.Rev
+	}
+
+	s.jsonOK(w, out)
+}

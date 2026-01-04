@@ -150,6 +150,98 @@ func TestHandleGetLatestCommit(t *testing.T) {
 	})
 }
 
+func TestHandleGetRepoStatus(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	router := srv.router()
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	t.Run("success - returns status for active repo", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:repostatus1", "repostatus1@example.com", "repostatus1.dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRepoStatus?did=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var out atproto.SyncGetRepoStatus_Output
+		err := json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, out.Did)
+		require.True(t, out.Active)
+		require.NotNil(t, out.Rev, "rev should be present for active repos")
+		require.Equal(t, actor.Rev, *out.Rev)
+		require.Nil(t, out.Status, "status should be nil for active repos")
+	})
+
+	t.Run("success - returns status for inactive repo", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:repostatus2", "repostatus2@example.com", "repostatus2.dev.atlaspds.dev")
+
+		// deactivate the actor
+		actor.Active = false
+		err := srv.db.SaveActor(ctx, actor)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRepoStatus?did=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out atproto.SyncGetRepoStatus_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, out.Did)
+		require.False(t, out.Active)
+		require.Nil(t, out.Rev, "rev should be nil for inactive repos")
+	})
+
+	t.Run("error - missing did parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRepoStatus", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid did format", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRepoStatus?did=not-a-did", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - repo not found", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRepoStatus?did=did:plc:nonexistent", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
 func TestHandleGetBlocks(t *testing.T) {
 	t.Parallel()
 	srv := testServer(t)
