@@ -109,26 +109,6 @@ func (db *DB) GetRecord(ctx context.Context, uri string) (*types.Record, error) 
 	return &record, nil
 }
 
-// DeleteRecord clears a record by its AT URI
-func (db *DB) DeleteRecord(ctx context.Context, uri string) error {
-	_, span := db.tracer.Start(ctx, "DeleteRecord")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("uri", uri))
-
-	aturi, err := at.ParseURI(uri)
-	if err != nil {
-		return fmt.Errorf("invalid AT URI: %w", err)
-	}
-
-	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
-		db.DeleteRecordTx(tx, aturi)
-		return nil, nil
-	})
-
-	return err
-}
-
 // DeleteRecordTx clears a record within an existing transaction.
 func (db *DB) DeleteRecordTx(tx fdb.Transaction, uri *at.URI) {
 	key := packURI(db.records.records, uri)

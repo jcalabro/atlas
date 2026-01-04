@@ -64,8 +64,7 @@ func testServer(t *testing.T) *server {
 			},
 		},
 
-		db:      testDB,
-		repoMgr: NewRepoManager(testDB),
+		db: testDB,
 
 		directory: &dir,
 		plc:       &plc.MockClient{},
@@ -99,7 +98,7 @@ func setupTestActor(t *testing.T, srv *server, did, email, handle string) (*type
 	}
 
 	// initialize the repo for this actor
-	rootCID, rev, err := srv.repoMgr.InitRepo(ctx, actor)
+	rootCID, rev, err := srv.db.InitRepo(ctx, actor)
 	require.NoError(t, err)
 	actor.Head = rootCID.String()
 	actor.Rev = rev

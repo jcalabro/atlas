@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -49,7 +50,7 @@ func TestGetRecord_NotFound(t *testing.T) {
 	require.Nil(t, retrieved)
 }
 
-func TestDeleteRecord(t *testing.T) {
+func TestDeleteRecordTx(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	db := testDB(t)
@@ -73,8 +74,11 @@ func TestDeleteRecord(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, retrieved)
 
-	// delete record
-	err = db.DeleteRecord(ctx, uri)
+	// delete record using DeleteRecordTx within a transaction
+	err = db.Transact(func(tx fdb.Transaction) error {
+		db.DeleteRecordTx(tx, record.URI())
+		return nil
+	})
 	require.NoError(t, err)
 
 	// verify it's gone

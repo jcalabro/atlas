@@ -4,26 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atdata"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/jcalabro/atlas/internal/at"
+	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-// rawCBOR wraps CBOR bytes and implements the CborMarshaler interface
-// required by indigo's repo package for storing records in the MST.
-type rawCBOR []byte
-
-func (r rawCBOR) MarshalCBOR(w io.Writer) error {
-	_, err := w.Write(r)
-	return err
-}
 
 func (s *server) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -249,39 +240,23 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// open the repo and add record to MST
-	repo, bs, err := s.repoMgr.OpenRepo(ctx, actor)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to open repo: %w", err))
-		return
-	}
-
-	// add record to MST using collection/rkey path
-	rpath := in.Collection + "/" + rkey
-	recordCID, err := repo.PutRecord(ctx, rpath, rawCBOR(cborBytes))
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to put record in MST: %w", err))
-		return
-	}
-
 	// create record entry for secondary index
 	record := &types.Record{
 		Did:        actor.Did,
 		Collection: in.Collection,
 		Rkey:       rkey,
-		Cid:        recordCID.String(),
 		Value:      cborBytes,
 		CreatedAt:  timestamppb.Now(),
 	}
 
-	// atomically commit: flush blocks, save record, update actor
-	result, err := s.repoMgr.CommitCreateRecord(ctx, repo, bs, actor, record, in.SwapCommit)
+	// atomically create record: MST operations, blocks, secondary index, actor update
+	result, err := s.db.CreateRecord(ctx, actor, record, cborBytes, in.SwapCommit)
 	if err != nil {
-		if errors.Is(err, ErrConcurrentModification) {
+		if errors.Is(err, foundation.ErrConcurrentModification) {
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}
-		s.internalErr(w, fmt.Errorf("failed to commit record: %w", err))
+		s.internalErr(w, fmt.Errorf("failed to create record: %w", err))
 		return
 	}
 
@@ -367,31 +342,17 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// open the repo and delete record from MST
-	repo, bs, err := s.repoMgr.OpenRepo(ctx, actor)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to open repo: %w", err))
-		return
-	}
-
-	// delete record from MST using collection/rkey path
-	rpath := in.Collection + "/" + in.Rkey
-	if err := repo.DeleteRecord(ctx, rpath); err != nil {
-		s.internalErr(w, fmt.Errorf("failed to delete record from MST: %w", err))
-		return
-	}
-
-	// parse the URI for the atomic commit
+	// parse the URI for the delete operation
 	aturi := &at.URI{Repo: actor.Did, Collection: in.Collection, Rkey: in.Rkey}
 
-	// atomically commit: flush blocks, delete record, update actor
-	result, err := s.repoMgr.CommitDeleteRecord(ctx, repo, bs, actor, aturi, in.SwapCommit)
+	// atomically delete record: MST operations, blocks, secondary index, actor update
+	result, err := s.db.DeleteRecord(ctx, actor, aturi, in.SwapCommit)
 	if err != nil {
-		if errors.Is(err, ErrConcurrentModification) {
+		if errors.Is(err, foundation.ErrConcurrentModification) {
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}
-		s.internalErr(w, fmt.Errorf("failed to commit deletion: %w", err))
+		s.internalErr(w, fmt.Errorf("failed to delete record: %w", err))
 		return
 	}
 

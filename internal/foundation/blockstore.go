@@ -13,35 +13,37 @@ import (
 
 // Blockstore implements a per-DID blockstore backed by FoundationDB.
 // It implements the minimal interface required by indigo's repo package.
-//
-// The blockstore uses a write buffer (pending) to provide read-your-writes
-// semantics within a request. This is necessary because indigo's MST code
-// creates blocks and then immediately reads them back during tree operations.
-// The pending map allows Get to return blocks that haven't been flushed to FDB yet.
-//
-// Typical flow:
-//  1. MST operations call Put() → blocks go to pending map
-//  2. MST operations call Get() → checks pending first, then FDB
-//  3. At commit time, FlushTx() writes all pending blocks to FDB atomically
-//  4. ClearPending() is called after successful transaction commit
 type Blockstore struct {
 	db     *DB
 	tracer trace.Tracer
 	did    string
 
-	// pending holds blocks that have been Put but not yet flushed to FDB.
-	// This write buffer is essential for MST operations which need to read
-	// blocks they just wrote before the final atomic commit.
-	pending map[string]blocks.Block
+	// readTx is the FDB read transaction for read-only mode.
+	readTx fdb.ReadTransaction
+
+	// writeTx is the FDB transaction for write mode.
+	// When non-nil, all reads and writes happen within this transaction.
+	writeTx *fdb.Transaction
 }
 
-// NewBlockstore creates a new blockstore for the given DID.
-func (db *DB) NewBlockstore(did string) *Blockstore {
+// NewReadBlockstore creates a read-only blockstore bound to an FDB read transaction.
+func (db *DB) NewReadBlockstore(did string, tx fdb.ReadTransaction) *Blockstore {
+	return &Blockstore{
+		db:     db,
+		tracer: db.tracer,
+		did:    did,
+		readTx: tx,
+	}
+}
+
+// NewWriteBlockstore creates a blockstore bound to an FDB write transaction.
+// All reads and writes will happen within this transaction.
+func (db *DB) NewWriteBlockstore(did string, tx fdb.Transaction) *Blockstore {
 	return &Blockstore{
 		db:      db,
 		tracer:  db.tracer,
 		did:     did,
-		pending: make(map[string]blocks.Block),
+		writeTx: &tx,
 	}
 }
 
@@ -55,16 +57,18 @@ func (bs *Blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) 
 		attribute.String("cid", c.String()),
 	)
 
-	// check pending first
-	if blk, ok := bs.pending[c.String()]; ok {
-		return blk, nil
-	}
-
 	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())
 
-	val, err := readTransaction(bs.db.db, func(tx fdb.ReadTransaction) ([]byte, error) {
-		return tx.Get(key).Get()
-	})
+	var val []byte
+	var err error
+
+	if bs.writeTx != nil {
+		val, err = (*bs.writeTx).Get(key).Get()
+	} else if bs.readTx != nil {
+		val, err = bs.readTx.Get(key).Get()
+	} else {
+		return nil, fmt.Errorf("blockstore get requires a transaction")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block: %w", err)
 	}
@@ -85,16 +89,18 @@ func (bs *Blockstore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 		attribute.String("cid", c.String()),
 	)
 
-	// check pending first
-	if _, ok := bs.pending[c.String()]; ok {
-		return true, nil
-	}
-
 	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())
 
-	val, err := readTransaction(bs.db.db, func(tx fdb.ReadTransaction) ([]byte, error) {
-		return tx.Get(key).Get()
-	})
+	var val []byte
+	var err error
+
+	if bs.writeTx != nil {
+		val, err = (*bs.writeTx).Get(key).Get()
+	} else if bs.readTx != nil {
+		val, err = bs.readTx.Get(key).Get()
+	} else {
+		return false, fmt.Errorf("blockstore has requires a transaction")
+	}
 	if err != nil {
 		return false, fmt.Errorf("failed to check block: %w", err)
 	}
@@ -111,7 +117,8 @@ func (bs *Blockstore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 	return len(blk.RawData()), nil
 }
 
-// Put stores a block. The block is held in memory until Flush is called.
+// Put stores a block. In transactional mode, writes directly to FDB.
+// In read-only mode, this method will panic as writes require a transaction.
 func (bs *Blockstore) Put(ctx context.Context, blk blocks.Block) error {
 	_, span := bs.tracer.Start(ctx, "Blockstore.Put")
 	defer span.End()
@@ -122,11 +129,16 @@ func (bs *Blockstore) Put(ctx context.Context, blk blocks.Block) error {
 		attribute.Int("size", len(blk.RawData())),
 	)
 
-	bs.pending[blk.Cid().String()] = blk
+	if bs.writeTx == nil {
+		return fmt.Errorf("blockstore put requires a transaction")
+	}
+
+	key := pack(bs.db.blockDir.blocks, bs.did, blk.Cid().Bytes())
+	(*bs.writeTx).Set(key, blk.RawData())
 	return nil
 }
 
-// PutMany stores multiple blocks.
+// PutMany stores multiple blocks. Requires transactional mode.
 func (bs *Blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 	_, span := bs.tracer.Start(ctx, "Blockstore.PutMany")
 	defer span.End()
@@ -136,54 +148,19 @@ func (bs *Blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 		attribute.Int("count", len(blks)),
 	)
 
+	if bs.writeTx == nil {
+		return fmt.Errorf("blockstore put_many requires a transaction")
+	}
+
 	for _, blk := range blks {
-		bs.pending[blk.Cid().String()] = blk
-	}
-	return nil
-}
-
-// Flush writes all pending blocks to FoundationDB.
-func (bs *Blockstore) Flush(ctx context.Context) error {
-	_, span := bs.tracer.Start(ctx, "Blockstore.Flush")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("did", bs.did),
-		attribute.Int("pending_count", len(bs.pending)),
-	)
-
-	if len(bs.pending) == 0 {
-		return nil
-	}
-
-	_, err := transaction(bs.db.db, func(tx fdb.Transaction) (any, error) {
-		bs.FlushTx(tx)
-		return nil, nil
-	})
-	if err != nil {
-		return fmt.Errorf("failed to flush blocks: %w", err)
-	}
-
-	// clear pending after successful flush
-	bs.pending = make(map[string]blocks.Block)
-	return nil
-}
-
-// FlushTx writes all pending blocks within an existing transaction.
-// Call ClearPending after the transaction commits successfully.
-func (bs *Blockstore) FlushTx(tx fdb.Transaction) {
-	for _, blk := range bs.pending {
 		key := pack(bs.db.blockDir.blocks, bs.did, blk.Cid().Bytes())
-		tx.Set(key, blk.RawData())
+		(*bs.writeTx).Set(key, blk.RawData())
 	}
+
+	return nil
 }
 
-// ClearPending clears the pending blocks map after a successful transaction.
-func (bs *Blockstore) ClearPending() {
-	bs.pending = make(map[string]blocks.Block)
-}
-
-// DeleteBlock removes a block from the store.
+// DeleteBlock removes a block from the store. Requires transactional mode.
 func (bs *Blockstore) DeleteBlock(ctx context.Context, c cid.Cid) error {
 	_, span := bs.tracer.Start(ctx, "Blockstore.DeleteBlock")
 	defer span.End()
@@ -193,23 +170,18 @@ func (bs *Blockstore) DeleteBlock(ctx context.Context, c cid.Cid) error {
 		attribute.String("cid", c.String()),
 	)
 
-	// remove from pending if present
-	delete(bs.pending, c.String())
+	if bs.writeTx == nil {
+		return fmt.Errorf("blockstore delete_block requires a transaction")
+	}
 
 	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())
-
-	_, err := transaction(bs.db.db, func(tx fdb.Transaction) (any, error) {
-		tx.Clear(key)
-		return nil, nil
-	})
-	return err
+	(*bs.writeTx).Clear(key)
+	return nil
 }
 
-// AllKeysChan returns a channel of all CIDs in the blockstore.
-// This is required by the blockstore interface but we don't need it for MST operations.
 func (bs *Blockstore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error) {
 	return nil, fmt.Errorf("AllKeysChan not implemented")
 }
 
-// HashOnRead is a no-op - we trust the stored data.
+// HashOnRead is a no-op
 func (bs *Blockstore) HashOnRead(enabled bool) {}

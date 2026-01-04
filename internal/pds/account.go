@@ -119,7 +119,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// initialize the empty repo for this account
-	rootCID, rev, err := s.repoMgr.InitRepo(ctx, actor)
+	rootCID, rev, err := s.db.InitRepo(ctx, actor)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to initialize repo: %w", err))
 		return
