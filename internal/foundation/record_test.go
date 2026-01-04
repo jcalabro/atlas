@@ -47,7 +47,7 @@ func TestGetRecord_NotFound(t *testing.T) {
 	db := testDB(t)
 
 	retrieved, err := db.GetRecord(ctx, "at://did:plc:nonexistent/app.bsky.feed.post/nonexistent")
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrNotFound)
 	require.Nil(t, retrieved)
 }
 
@@ -84,7 +84,7 @@ func TestDeleteRecordTx(t *testing.T) {
 
 	// verify it's gone
 	retrieved, err = db.GetRecord(ctx, uri)
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ErrNotFound)
 	require.Nil(t, retrieved)
 }
 

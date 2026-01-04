@@ -151,15 +151,15 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 }
 
 // Pings the database to ensure we have connectivity
-func (db *DB) Ping(ctx context.Context) error {
-	_, span := db.tracer.Start(ctx, "Ping")
-	defer span.End()
+func (db *DB) Ping(ctx context.Context) (err error) {
+	_, _, done := db.observe(ctx, "Ping")
+	defer func() { done(err) }()
 
-	_, err := readTransaction(db.db, func(tx fdb.ReadTransaction) ([]byte, error) {
+	_, err = readTransaction(db.db, func(tx fdb.ReadTransaction) ([]byte, error) {
 		return tx.Get(fdb.Key("PING")).Get()
 	})
 
-	return err
+	return
 }
 
 // Transact runs the given function within a FDB transaction.
@@ -237,21 +237,23 @@ func readProto(db *fdb.Database, item proto.Message, fn func(fdb.ReadTransaction
 	return proto.Unmarshal(buf, item)
 }
 
-// Records prometheus metrics and OTEL span status for foundation queries
+// Records prometheus metrics and OTEL span status for foundation queries.
+// The returned `done` function must be called to end the span and record metrics.
 func (db *DB) observe(ctx context.Context, name string) (context.Context, trace.Span, func(error)) {
 	ctx, span := db.tracer.Start(ctx, name)
-	defer span.End()
-
 	start := time.Now()
+
 	return ctx, span, func(err error) {
+		defer span.End()
+
 		var status string
 		switch {
 		case err == nil:
 			status = metrics.StatusOK
-			span.SetStatus(codes.Ok)
+			span.SetStatus(codes.Ok, "")
 		case errors.Is(err, ErrNotFound):
 			status = metrics.StatusNotFound
-			span.SetStatus(codes.Ok) // not found is a successful query
+			span.SetStatus(codes.Ok, "not found")
 		default:
 			status = metrics.StatusError
 			span.RecordError(err)

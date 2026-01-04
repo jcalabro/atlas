@@ -2,6 +2,7 @@ package pds
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -12,6 +13,7 @@ import (
 	cbor "github.com/ipfs/go-ipld-cbor"
 	"github.com/ipld/go-car"
 	carutil "github.com/ipld/go-car/util"
+	"github.com/jcalabro/atlas/internal/foundation"
 )
 
 func (s *server) handleGetBlocks(w http.ResponseWriter, r *http.Request) {
@@ -40,12 +42,12 @@ func (s *server) handleGetBlocks(w http.ResponseWriter, r *http.Request) {
 
 	// get the actor to verify they exist and get the root CID
 	actor, err := s.db.GetActorByDID(ctx, didParam)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
+	if errors.Is(err, foundation.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}
-	if actor == nil {
-		s.notFound(w, fmt.Errorf("repo not found"))
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
 		return
 	}
 
@@ -124,12 +126,12 @@ func (s *server) handleGetLatestCommit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor, err := s.db.GetActorByDID(ctx, did)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
+	if errors.Is(err, foundation.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}
-	if actor == nil {
-		s.notFound(w, fmt.Errorf("repo not found"))
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
 		return
 	}
 
@@ -156,12 +158,12 @@ func (s *server) handleGetRepoStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor, err := s.db.GetActorByDID(ctx, did)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
+	if errors.Is(err, foundation.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}
-	if actor == nil {
-		s.notFound(w, fmt.Errorf("repo not found"))
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
 		return
 	}
 
@@ -198,12 +200,12 @@ func (s *server) handleGetRepo(w http.ResponseWriter, r *http.Request) {
 	since := r.URL.Query().Get("since")
 
 	actor, err := s.db.GetActorByDID(ctx, did)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
+	if errors.Is(err, foundation.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}
-	if actor == nil {
-		s.notFound(w, fmt.Errorf("repo not found"))
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
 		return
 	}
 

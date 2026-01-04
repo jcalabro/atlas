@@ -4,12 +4,10 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/apple/foundationdb/bindings/go/src/fdb/directory"
 	"github.com/jcalabro/atlas/internal/at"
-	"github.com/jcalabro/atlas/internal/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/proto"
@@ -43,28 +41,25 @@ func ValidateRecord(r *types.Record) error {
 
 // SaveRecord stores a record in the database
 func (db *DB) SaveRecord(ctx context.Context, record *types.Record) (err error) {
-	start := time.Now()
-	defer func() { observeOperation("SaveRecord", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "SaveRecord")
-	defer span.End()
+	_, span, done := db.observe(ctx, "SaveRecord")
+	defer func() { done(err) }()
 
 	span.SetAttributes(
 		attribute.String("uri", record.URI().String()),
 		attribute.String("cid", record.Cid),
 		attribute.Int("size", len(record.Value)),
-		attribute.String("created_at", metrics.FormatPBTime(record.CreatedAt)),
 	)
 
-	if err := ValidateRecord(record); err != nil {
-		return fmt.Errorf("invalid record: %w", err)
+	if err = ValidateRecord(record); err != nil {
+		err = fmt.Errorf("invalid record: %w", err)
+		return
 	}
 
 	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
 		return nil, db.saveRecordTx(tx, record)
 	})
 
-	return err
+	return
 }
 
 // saveRecordTx stores a record within an existing transaction
@@ -84,34 +79,30 @@ func (db *DB) saveRecordTx(tx fdb.Transaction, record *types.Record) error {
 }
 
 // GetRecord retrieves a record by its AT URI
-func (db *DB) GetRecord(ctx context.Context, uri string) (_ *types.Record, err error) {
-	start := time.Now()
-	defer func() { observeOperation("GetRecord", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "GetRecord")
-	defer span.End()
+func (db *DB) GetRecord(ctx context.Context, uri string) (record *types.Record, err error) {
+	_, span, done := db.observe(ctx, "GetRecord")
+	defer func() { done(err) }()
 
 	span.SetAttributes(attribute.String("uri", uri))
 
 	aturi, err := at.ParseURI(uri)
 	if err != nil {
-		return nil, fmt.Errorf("invalid AT URI: %w", err)
+		err = fmt.Errorf("invalid AT URI: %w", err)
+		return
 	}
 
 	key := packURI(db.records.records, aturi)
 
-	var record types.Record
-	ok, err := readProto(db.db, &record, func(tx fdb.ReadTransaction) ([]byte, error) {
+	var r types.Record
+	err = readProto(db.db, &r, func(tx fdb.ReadTransaction) ([]byte, error) {
 		return tx.Get(key).Get()
 	})
 	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, nil
+		return
 	}
 
-	return &record, nil
+	record = &r
+	return
 }
 
 // DeleteRecordTx clears a record within an existing transaction.
@@ -139,22 +130,18 @@ func (db *DB) decrementCollectionCountTx(tx fdb.Transaction, did, collection str
 
 // GetCollections returns the list of distinct collection NSIDs for a DID.
 // It reads from the collection counts secondary index for efficiency.
-func (db *DB) GetCollections(ctx context.Context, did string) (_ []string, err error) {
-	start := time.Now()
-	defer func() { observeOperation("GetCollections", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "GetCollections")
-	defer span.End()
+func (db *DB) GetCollections(ctx context.Context, did string) (collections []string, err error) {
+	_, span, done := db.observe(ctx, "GetCollections")
+	defer func() { done(err) }()
 
 	span.SetAttributes(attribute.String("did", did))
 
-	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]string, error) {
-		// range scan over the collection counts index for this DID
+	collections, err = readTransaction(db.db, func(tx fdb.ReadTransaction) ([]string, error) {
 		rangeBegin := pack(db.records.collectionCounts, did)
 		rangeEnd := pack(db.records.collectionCounts, did+"\xff")
 		kr := fdb.KeyRange{Begin: rangeBegin, End: rangeEnd}
 
-		var collections []string
+		var result []string
 		iter := tx.GetRange(kr, fdb.RangeOptions{}).Iterator()
 		for iter.Advance() {
 			kv, err := iter.Get()
@@ -180,11 +167,13 @@ func (db *DB) GetCollections(ctx context.Context, did string) (_ []string, err e
 			if len(kv.Value) == 8 {
 				count := int64(binary.BigEndian.Uint64(kv.Value))
 				if count > 0 {
-					collections = append(collections, collection)
+					result = append(result, collection)
 				}
 			}
 		}
 
-		return collections, nil
+		return result, nil
 	})
+
+	return
 }

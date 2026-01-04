@@ -65,12 +65,12 @@ func (s *server) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 	uri := at.FormatURI(did, collection, rkey)
 
 	record, err := s.db.GetRecord(ctx, uri)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to get record: %w", err))
+	if errors.Is(err, foundation.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("record not found"))
 		return
 	}
-	if record == nil {
-		s.notFound(w, fmt.Errorf("record not found"))
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get record: %w", err))
 		return
 	}
 
@@ -212,7 +212,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	// check if record already exists
 	uri := at.FormatURI(actor.Did, in.Collection, rkey)
 	existing, err := s.db.GetRecord(ctx, uri)
-	if err != nil {
+	if err != nil && !errors.Is(err, foundation.ErrNotFound) {
 		s.internalErr(w, fmt.Errorf("failed to check existing record: %w", err))
 		return
 	}
@@ -320,12 +320,12 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 
 	// check if record exists
 	existing, err := s.db.GetRecord(ctx, uri)
-	if err != nil {
-		s.internalErr(w, fmt.Errorf("failed to check existing record: %w", err))
+	if errors.Is(err, foundation.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("record not found"))
 		return
 	}
-	if existing == nil {
-		s.notFound(w, fmt.Errorf("record not found"))
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to check existing record: %w", err))
 		return
 	}
 

@@ -131,9 +131,9 @@ func TestGetActorByEmail(t *testing.T) {
 		require.True(t, actor.CreatedAt.AsTime().Equal(retrieved.CreatedAt.AsTime()))
 	})
 
-	t.Run("returns nil for non-existent email", func(t *testing.T) {
+	t.Run("returns ErrNotFound for non-existent email", func(t *testing.T) {
 		actor, err := db.GetActorByEmail(ctx, testPDSHost, "nonexistent@example.com")
-		require.NoError(t, err)
+		require.ErrorIs(t, err, ErrNotFound)
 		require.Nil(t, actor)
 	})
 
@@ -226,9 +226,9 @@ func TestGetActorByDID(t *testing.T) {
 		require.True(t, actor.CreatedAt.AsTime().Equal(retrieved.CreatedAt.AsTime()))
 	})
 
-	t.Run("returns nil for non-existent DID", func(t *testing.T) {
+	t.Run("returns ErrNotFound for non-existent DID", func(t *testing.T) {
 		actor, err := db.GetActorByDID(ctx, "did:plc:nonexistent")
-		require.NoError(t, err)
+		require.ErrorIs(t, err, ErrNotFound)
 		require.Nil(t, actor)
 	})
 
@@ -322,9 +322,9 @@ func TestGetActorByHandle(t *testing.T) {
 		require.True(t, actor.CreatedAt.AsTime().Equal(retrieved.CreatedAt.AsTime()))
 	})
 
-	t.Run("returns nil for non-existent handle", func(t *testing.T) {
+	t.Run("returns ErrNotFound for non-existent handle", func(t *testing.T) {
 		actor, err := db.GetActorByHandle(ctx, "nonexistent.dev.atlaspds.net")
-		require.NoError(t, err)
+		require.ErrorIs(t, err, ErrNotFound)
 		require.Nil(t, actor)
 	})
 

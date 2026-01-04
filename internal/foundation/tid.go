@@ -17,12 +17,9 @@ import (
 // low 10 bits reserved for clock ID (set to 0). If the timestamp-based TID
 // would not be greater than the last generated TID for this repo, we
 // increment from the last value instead to maintain monotonicity.
-func (db *DB) NextTID(ctx context.Context, did string) (_ syntax.TID, err error) {
-	start := time.Now()
-	defer func() { observeOperation("NextTID", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "NextTID")
-	defer span.End()
+func (db *DB) NextTID(ctx context.Context, did string) (tid syntax.TID, err error) {
+	_, span, done := db.observe(ctx, "NextTID")
+	defer func() { done(err) }()
 
 	span.SetAttributes(attribute.String("did", did))
 
@@ -45,25 +42,26 @@ func (db *DB) NextTID(ctx context.Context, did string) (_ syntax.TID, err error)
 		candidate := uint64(nowMicros&0x1F_FFFF_FFFF_FFFF) << 10
 
 		// ensure monotonicity: new TID must be greater than last
-		var tid uint64
+		var t uint64
 		if candidate > lastTID {
-			tid = candidate
+			t = candidate
 		} else {
-			tid = lastTID + 1
+			t = lastTID + 1
 		}
 
 		// write back
 		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, tid)
+		binary.BigEndian.PutUint64(buf, t)
 		tx.Set(key, buf)
 
-		return tid, nil
+		return t, nil
 	})
 	if err != nil {
-		return "", err
+		return
 	}
 
 	span.SetAttributes(attribute.Int64("tid", int64(newTID)))
 
-	return syntax.NewTIDFromInteger(newTID), nil
+	tid = syntax.NewTIDFromInteger(newTID)
+	return
 }

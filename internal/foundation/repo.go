@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
@@ -30,12 +29,9 @@ var cidBuilder = cid.NewPrefixV1(cid.DagCBOR, multihash.SHA2_256)
 
 // InitRepo creates an empty repository for a new account.
 // Returns the initial root CID and revision.
-func (db *DB) InitRepo(ctx context.Context, actor *types.Actor) (_ cid.Cid, _ string, err error) {
-	start := time.Now()
-	defer func() { observeOperation("InitRepo", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "InitRepo")
-	defer span.End()
+func (db *DB) InitRepo(ctx context.Context, actor *types.Actor) (commitCID cid.Cid, rev string, err error) {
+	_, span, done := db.observe(ctx, "InitRepo")
+	defer func() { done(err) }()
 
 	span.SetAttributes(
 		attribute.String("did", actor.Did),
@@ -91,10 +87,12 @@ func (db *DB) InitRepo(ctx context.Context, actor *types.Actor) (_ cid.Cid, _ st
 		return &result{commitCID: commitCID, rev: commit.Rev}, nil
 	})
 	if err != nil {
-		return cid.Undef, "", err
+		return
 	}
 
-	return res.commitCID, res.rev, nil
+	commitCID = res.commitCID
+	rev = res.rev
+	return
 }
 
 // CreateRecordResult contains the result of an atomic record creation
@@ -113,25 +111,20 @@ func (db *DB) CreateRecord(
 	record *types.Record,
 	cborBytes []byte,
 	swapCommit *string,
-) (_ *CreateRecordResult, err error) {
-	start := time.Now()
-	defer func() { observeOperation("CreateRecord", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "CreateRecord")
-	defer span.End()
+) (result *CreateRecordResult, err error) {
+	_, span, done := db.observe(ctx, "CreateRecord")
+	defer func() { done(err) }()
 
 	span.SetAttributes(
 		attribute.String("did", actor.Did),
 		attribute.String("handle", actor.Handle),
 		attribute.String("uri", record.URI().String()),
-		attribute.String("cid", record.Cid),
-		attribute.String("created_at", metrics.FormatPBTime(record.CreatedAt)),
 		attribute.Int("record_size", len(record.Value)),
 		attribute.Int("cbor_size", len(cborBytes)),
 		metrics.NilString("swap_commit", swapCommit),
 	)
 
-	return transaction(db.db, func(tx fdb.Transaction) (*CreateRecordResult, error) {
+	result, err = transaction(db.db, func(tx fdb.Transaction) (*CreateRecordResult, error) {
 		// check swapCommit - verify the current head hasn't been changed by
 		// another process/thread attempting to write concurrently
 		existing, err := db.getActorByDIDTx(tx, actor.Did)
@@ -242,6 +235,8 @@ func (db *DB) CreateRecord(
 			Rev:       newCommit.Rev,
 		}, nil
 	})
+
+	return
 }
 
 // DeleteRecordResult contains the result of an atomic record deletion.
@@ -258,12 +253,9 @@ func (db *DB) DeleteRecord(
 	actor *types.Actor,
 	uri *at.URI,
 	swapCommit *string,
-) (_ *DeleteRecordResult, err error) {
-	start := time.Now()
-	defer func() { observeOperation("DeleteRecord", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "DeleteRecord")
-	defer span.End()
+) (result *DeleteRecordResult, err error) {
+	_, span, done := db.observe(ctx, "DeleteRecord")
+	defer func() { done(err) }()
 
 	span.SetAttributes(
 		attribute.String("did", actor.Did),
@@ -272,7 +264,7 @@ func (db *DB) DeleteRecord(
 		metrics.NilString("swap_commit", swapCommit),
 	)
 
-	return transaction(db.db, func(tx fdb.Transaction) (*DeleteRecordResult, error) {
+	result, err = transaction(db.db, func(tx fdb.Transaction) (*DeleteRecordResult, error) {
 		// check swapCommit - verify the current head hasn't changed
 		existing, err := db.getActorByDIDTx(tx, actor.Did)
 		if err != nil {
@@ -363,6 +355,8 @@ func (db *DB) DeleteRecord(
 			Rev:       newCommit.Rev,
 		}, nil
 	})
+
+	return
 }
 
 // loadCommit loads a commit from the blockstore and returns it along with a TID clock

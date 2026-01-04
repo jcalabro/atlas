@@ -3,21 +3,18 @@ package foundation
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/trace"
 )
 
 // blockstore implements a per-DID blockstore backed by FoundationDB.
 // It implements the minimal interface required by indigo's repo package.
 type blockstore struct {
-	db     *DB
-	tracer trace.Tracer
-	did    string
+	db  *DB
+	did string
 
 	// readTx is the FDB read transaction for read-only mode.
 	readTx fdb.ReadTransaction
@@ -35,7 +32,6 @@ type blockstore struct {
 func (db *DB) newReadBlockstore(did string, tx fdb.ReadTransaction) *blockstore {
 	return &blockstore{
 		db:     db,
-		tracer: db.tracer,
 		did:    did,
 		readTx: tx,
 	}
@@ -47,7 +43,6 @@ func (db *DB) newReadBlockstore(did string, tx fdb.ReadTransaction) *blockstore 
 func (db *DB) newWriteBlockstore(did string, tx fdb.Transaction) *blockstore {
 	return &blockstore{
 		db:      db,
-		tracer:  db.tracer,
 		did:     did,
 		writeTx: &tx,
 	}
@@ -61,19 +56,10 @@ func (bs *blockstore) SetRev(rev string) {
 
 // Get retrieves a block by its CID.
 func (bs *blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) {
-	_, span := bs.tracer.Start(ctx, "Blockstore.Get")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("did", bs.did),
-		attribute.String("cid", c.String()),
-	)
-
-	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())
-
 	var val []byte
 	var err error
 
+	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())
 	if bs.writeTx != nil {
 		val, err = (*bs.writeTx).Get(key).Get()
 	} else if bs.readTx != nil {
@@ -93,19 +79,10 @@ func (bs *blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) 
 
 // Has returns whether the blockstore contains a block with the given CID.
 func (bs *blockstore) Has(ctx context.Context, c cid.Cid) (bool, error) {
-	_, span := bs.tracer.Start(ctx, "Blockstore.Has")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("did", bs.did),
-		attribute.String("cid", c.String()),
-	)
-
-	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())
-
 	var val []byte
 	var err error
 
+	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())
 	if bs.writeTx != nil {
 		val, err = (*bs.writeTx).Get(key).Get()
 	} else if bs.readTx != nil {
@@ -132,15 +109,6 @@ func (bs *blockstore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 // Put stores a block. In transactional mode, writes directly to FDB.
 // In read-only mode, this method will panic as writes require a transaction.
 func (bs *blockstore) Put(ctx context.Context, blk blocks.Block) error {
-	_, span := bs.tracer.Start(ctx, "Blockstore.Put")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("did", bs.did),
-		attribute.String("cid", blk.Cid().String()),
-		attribute.Int("size", len(blk.RawData())),
-	)
-
 	if bs.writeTx == nil {
 		return fmt.Errorf("blockstore put requires a transaction")
 	}
@@ -160,14 +128,6 @@ func (bs *blockstore) Put(ctx context.Context, blk blocks.Block) error {
 
 // PutMany stores multiple blocks. Requires transactional mode.
 func (bs *blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
-	_, span := bs.tracer.Start(ctx, "Blockstore.PutMany")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("did", bs.did),
-		attribute.Int("count", len(blks)),
-	)
-
 	if bs.writeTx == nil {
 		return fmt.Errorf("blockstore put_many requires a transaction")
 	}
@@ -189,14 +149,6 @@ func (bs *blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 
 // DeleteBlock removes a block from the store. Requires transactional mode.
 func (bs *blockstore) DeleteBlock(ctx context.Context, c cid.Cid) error {
-	_, span := bs.tracer.Start(ctx, "Blockstore.DeleteBlock")
-	defer span.End()
-
-	span.SetAttributes(
-		attribute.String("did", bs.did),
-		attribute.String("cid", c.String()),
-	)
-
 	if bs.writeTx == nil {
 		return fmt.Errorf("blockstore delete_block requires a transaction")
 	}
@@ -215,13 +167,18 @@ func (bs *blockstore) HashOnRead(enabled bool) {}
 
 // GetBlocks retrieves multiple blocks by their CIDs for a given DID.
 // Returns the blocks that were found. Missing blocks are silently skipped.
-func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) (_ []blocks.Block, err error) {
-	_, span := db.tracer.Start(ctx, "GetBlocks")
-	defer span.End()
+func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) (result []blocks.Block, err error) {
+	_, span, done := db.observe(ctx, "GetBlocks")
+	defer func() { done(err) }()
 
-	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
+	span.SetAttributes(
+		attribute.String("did", did),
+		attribute.Int("num_cids", len(cids)),
+	)
+
+	result, err = readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
 		bs := db.newReadBlockstore(did, tx)
-		result := make([]blocks.Block, 0, len(cids))
+		blks := make([]blocks.Block, 0, len(cids))
 
 		for _, c := range cids {
 			blk, err := bs.Get(ctx, c)
@@ -229,31 +186,29 @@ func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) (_ []bl
 				// skip blocks that are not found
 				continue
 			}
-			result = append(result, blk)
+			blks = append(blks, blk)
 		}
 
-		return result, nil
+		return blks, nil
 	})
+
+	return
 }
 
 // GetAllBlocks retrieves all blocks for a given DID.
-func (db *DB) GetAllBlocks(ctx context.Context, did string) (_ []blocks.Block, err error) {
-	start := time.Now()
-	defer func() { observeOperation("GetAllBlocks", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "GetAllBlocks")
-	defer span.End()
+func (db *DB) GetAllBlocks(ctx context.Context, did string) (result []blocks.Block, err error) {
+	_, span, done := db.observe(ctx, "GetAllBlocks")
+	defer func() { done(err) }()
 
 	span.SetAttributes(attribute.String("did", did))
 
-	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
-		// create range for all blocks with this DID prefix
+	result, err = readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
 		rangeBegin := pack(db.blockDir.blocks, did)
 		rangeEnd := pack(db.blockDir.blocks, did+"\xff")
 
 		kr := fdb.KeyRange{Begin: rangeBegin, End: rangeEnd}
 
-		var result []blocks.Block
+		var blks []blocks.Block
 		iter := tx.GetRange(kr, fdb.RangeOptions{}).Iterator()
 		for iter.Advance() {
 			kv, err := iter.Get()
@@ -285,28 +240,27 @@ func (db *DB) GetAllBlocks(ctx context.Context, did string) (_ []blocks.Block, e
 				return nil, fmt.Errorf("failed to create block: %w", err)
 			}
 
-			result = append(result, blk)
+			blks = append(blks, blk)
 		}
 
-		return result, nil
+		return blks, nil
 	})
+
+	return
 }
 
 // GetBlocksSince retrieves all blocks added after the given revision.
 // Used for incremental sync via the `since` parameter.
-func (db *DB) GetBlocksSince(ctx context.Context, did string, sinceRev string) (_ []blocks.Block, err error) {
-	start := time.Now()
-	defer func() { observeOperation("GetBlocksSince", start, err) }()
-
-	_, span := db.tracer.Start(ctx, "GetBlocksSince")
-	defer span.End()
+func (db *DB) GetBlocksSince(ctx context.Context, did string, sinceRev string) (result []blocks.Block, err error) {
+	_, span, done := db.observe(ctx, "GetBlocksSince")
+	defer func() { done(err) }()
 
 	span.SetAttributes(
 		attribute.String("did", did),
 		attribute.String("since", sinceRev),
 	)
 
-	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
+	result, err = readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
 		// query the secondary index for all revisions after sinceRev
 		// use sinceRev + "\x00" to exclude the exact sinceRev
 		rangeBegin := pack(db.blockDir.blocksByRev, did, sinceRev+"\x00")
@@ -345,12 +299,8 @@ func (db *DB) GetBlocksSince(ctx context.Context, did string, sinceRev string) (
 			cids = append(cids, c)
 		}
 
-		if len(cids) == 0 {
-			return nil, nil
-		}
-
 		// fetch the actual block data from the primary index
-		result := make([]blocks.Block, 0, len(cids))
+		blks := make([]blocks.Block, 0, len(cids))
 		for _, c := range cids {
 			key := pack(db.blockDir.blocks, did, c.Bytes())
 			val, err := tx.Get(key).Get()
@@ -366,9 +316,11 @@ func (db *DB) GetBlocksSince(ctx context.Context, did string, sinceRev string) (
 			if err != nil {
 				return nil, fmt.Errorf("failed to create block: %w", err)
 			}
-			result = append(result, blk)
+			blks = append(blks, blk)
 		}
 
-		return result, nil
+		return blks, nil
 	})
+
+	return
 }

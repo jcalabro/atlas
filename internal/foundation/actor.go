@@ -104,7 +104,7 @@ func (db *DB) GetActorByDID(ctx context.Context, did string) (actor *types.Actor
 	_, span, done := db.observe(ctx, "GetActorByDID")
 	defer func() { done(err) }()
 
-	span.SetAttributes(attribute.String("did", actor.Did))
+	span.SetAttributes(attribute.String("did", did))
 
 	actorKey := pack(db.actors.actors, did)
 

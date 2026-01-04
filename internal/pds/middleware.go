@@ -2,6 +2,7 @@ package pds
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jcalabro/atlas/internal/env"
+	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/pds/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -182,13 +184,13 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		actor, err := s.db.GetActorByDID(ctx, claims.DID)
+		if errors.Is(err, foundation.ErrNotFound) {
+			s.unauthorized(w, fmt.Errorf("actor not found"))
+			return
+		}
 		if err != nil {
 			s.log.Error("failed to get actor by DID", "did", claims.DID, "error", err)
 			s.internalErr(w, fmt.Errorf("failed to authenticate"))
-			return
-		}
-		if actor == nil {
-			s.unauthorized(w, fmt.Errorf("actor not found"))
 			return
 		}
 
