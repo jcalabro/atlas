@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/jcalabro/atlas/internal/env"
-	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/pds"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/urfave/cli/v3"
 )
 
@@ -62,7 +62,7 @@ func pdsCmd() *cli.Command {
 				WriteTimeout: c.Duration("write-timeout"),
 				PLCURL:       c.String("plc"),
 				ConfigFile:   c.String("config"),
-				FDB: foundation.Config{
+				FDB: db.Config{
 					ClusterFile: c.String("fdb-cluster-file"),
 					APIVersion:  c.Int("fdb-api-version"),
 				},

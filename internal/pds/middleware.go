@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/jcalabro/atlas/internal/env"
-	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/pds/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"go.opentelemetry.io/otel/attribute"
@@ -184,7 +184,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		actor, err := s.db.GetActorByDID(ctx, claims.DID)
-		if errors.Is(err, foundation.ErrNotFound) {
+		if errors.Is(err, db.ErrNotFound) {
 			s.unauthorized(w, fmt.Errorf("actor not found"))
 			return
 		}

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/pds/db"
 )
 
 type didDocument struct {
@@ -68,7 +68,7 @@ func (s *server) handleAtprotoDid(w http.ResponseWriter, r *http.Request) {
 	// the host middleware already validated the base host, so if we got here
 	// with a different reqHost, it might be a handle lookup
 	actor, err := s.db.GetActorByHandle(ctx, reqHost)
-	if err != nil && !errors.Is(err, foundation.ErrNotFound) {
+	if err != nil && !errors.Is(err, db.ErrNotFound) {
 		s.internalErr(w, fmt.Errorf("failed to look up handle: %w", err))
 		return
 	}

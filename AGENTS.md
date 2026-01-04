@@ -36,7 +36,7 @@ To update protobuf types, edit the `.proto` file, then run `just build-protos` t
   - `--help`: Displays the help command and exits
 - **internal/at/**: AT Protocol utilities, including AT URI parsing and construction
 - **internal/env/**: Environment configuration and version handling
-- **internal/foundation/**: FoundationDB client initialization and configuration. Think of this as an ORM for foundationdb.
+- **internal/pds/db/**: FoundationDB client initialization and configuration. Think of this as an ORM for foundationdb.
 - **internal/metrics/**: Prometheus metrics and OpenTelemetry tracing setup
 - **internal/pds/**: HTTP server that implements the ATProto PDS XRPC interface. This is where the PDS business logic lives.
 - **internal/plc/**: Implements a HTTP client for `plc.directory`, one of the main DID identity systems for atproto. Includes a mock client for tests.

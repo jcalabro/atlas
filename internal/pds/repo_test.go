@@ -13,7 +13,7 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -667,7 +667,7 @@ func TestHandleDeleteRecord(t *testing.T) {
 
 		// verify record is deleted
 		_, err = srv.db.GetRecord(ctx, uri)
-		require.ErrorIs(t, err, foundation.ErrNotFound)
+		require.ErrorIs(t, err, db.ErrNotFound)
 	})
 
 	t.Run("success - deletes record with swapRecord", func(t *testing.T) {
@@ -724,7 +724,7 @@ func TestHandleDeleteRecord(t *testing.T) {
 		// verify record is deleted
 		uri := fmt.Sprintf("at://%s/app.bsky.feed.post/%s", actor.Did, rkey)
 		_, err = srv.db.GetRecord(ctx, uri)
-		require.ErrorIs(t, err, foundation.ErrNotFound)
+		require.ErrorIs(t, err, db.ErrNotFound)
 	})
 
 	t.Run("error - repo mismatch", func(t *testing.T) {

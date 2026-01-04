@@ -11,7 +11,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/jcalabro/atlas/internal/at"
-	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
 	"go.opentelemetry.io/otel/attribute"
@@ -65,7 +65,7 @@ func (s *server) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 	uri := at.FormatURI(did, collection, rkey)
 
 	record, err := s.db.GetRecord(ctx, uri)
-	if errors.Is(err, foundation.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		s.notFound(w, fmt.Errorf("record not found"))
 		return
 	}
@@ -212,7 +212,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	// check if record already exists
 	uri := at.FormatURI(actor.Did, in.Collection, rkey)
 	existing, err := s.db.GetRecord(ctx, uri)
-	if err != nil && !errors.Is(err, foundation.ErrNotFound) {
+	if err != nil && !errors.Is(err, db.ErrNotFound) {
 		s.internalErr(w, fmt.Errorf("failed to check existing record: %w", err))
 		return
 	}
@@ -251,7 +251,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	// atomically create record: MST operations, blocks, secondary index, actor update
 	result, err := s.db.CreateRecord(ctx, actor, record, cborBytes, in.SwapCommit)
 	if err != nil {
-		if errors.Is(err, foundation.ErrConcurrentModification) {
+		if errors.Is(err, db.ErrConcurrentModification) {
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}
@@ -320,7 +320,7 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 
 	// check if record exists
 	existing, err := s.db.GetRecord(ctx, uri)
-	if errors.Is(err, foundation.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		s.notFound(w, fmt.Errorf("record not found"))
 		return
 	}
@@ -347,7 +347,7 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 	// atomically delete record: MST operations, blocks, secondary index, actor update
 	result, err := s.db.DeleteRecord(ctx, actor, aturi, in.SwapCommit)
 	if err != nil {
-		if errors.Is(err, foundation.ErrConcurrentModification) {
+		if errors.Is(err, db.ErrConcurrentModification) {
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}

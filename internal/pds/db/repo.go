@@ -1,4 +1,4 @@
-package foundation
+package db
 
 import (
 	"bytes"

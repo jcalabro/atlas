@@ -11,8 +11,8 @@ import (
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
 	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
-	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
 	"go.opentelemetry.io/otel/attribute"
@@ -63,7 +63,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 
 	// check if the email is already taken on this PDS host (emails are per-PDS unique)
 	existingEmail, err := s.db.GetActorByEmail(ctx, host.hostname, *in.Email)
-	if err != nil && !errors.Is(err, foundation.ErrNotFound) {
+	if err != nil && !errors.Is(err, db.ErrNotFound) {
 		s.internalErr(w, fmt.Errorf("failed to get actor by email: %w", err))
 		return
 	}

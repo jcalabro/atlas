@@ -16,8 +16,8 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/bluesky-social/indigo/atproto/identity"
-	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/metrics"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/plc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -38,7 +38,7 @@ type Args struct {
 	PLCURL     string
 	ConfigFile string
 
-	FDB foundation.Config
+	FDB db.Config
 }
 
 type server struct {
@@ -49,7 +49,7 @@ type server struct {
 
 	hosts map[string]*loadedHostConfig
 
-	db *foundation.DB
+	db *db.DB
 
 	directory identity.Directory
 	plc       plc.PLC
@@ -87,7 +87,7 @@ func Run(ctx context.Context, args *Args) error {
 		return fmt.Errorf("failed to initialize plc client: %w", err)
 	}
 
-	db, err := foundation.New(tracer, args.FDB)
+	db, err := db.New(tracer, args.FDB)
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,7 @@ import (
 
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
 	"github.com/bluesky-social/indigo/atproto/identity"
-	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/plc"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ import (
 
 var (
 	setupOnce sync.Once
-	testDB    *foundation.DB
+	testDB    *db.DB
 )
 
 const testPDSHost = "dev.atlaspds.dev"
@@ -35,7 +35,7 @@ func testServer(t *testing.T) *server {
 
 	var err error
 	setupOnce.Do(func() {
-		testDB, err = foundation.New(tracer, foundation.Config{
+		testDB, err = db.New(tracer, db.Config{
 			ClusterFile: "../../foundation.cluster",
 			APIVersion:  730,
 		})

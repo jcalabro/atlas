@@ -13,7 +13,7 @@ import (
 	cbor "github.com/ipfs/go-ipld-cbor"
 	"github.com/ipld/go-car"
 	carutil "github.com/ipld/go-car/util"
-	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/pds/db"
 )
 
 func (s *server) handleGetBlocks(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +42,7 @@ func (s *server) handleGetBlocks(w http.ResponseWriter, r *http.Request) {
 
 	// get the actor to verify they exist and get the root CID
 	actor, err := s.db.GetActorByDID(ctx, didParam)
-	if errors.Is(err, foundation.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}
@@ -126,7 +126,7 @@ func (s *server) handleGetLatestCommit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor, err := s.db.GetActorByDID(ctx, did)
-	if errors.Is(err, foundation.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}
@@ -158,7 +158,7 @@ func (s *server) handleGetRepoStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	actor, err := s.db.GetActorByDID(ctx, did)
-	if errors.Is(err, foundation.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}
@@ -200,7 +200,7 @@ func (s *server) handleGetRepo(w http.ResponseWriter, r *http.Request) {
 	since := r.URL.Query().Get("since")
 
 	actor, err := s.db.GetActorByDID(ctx, did)
-	if errors.Is(err, foundation.ErrNotFound) {
+	if errors.Is(err, db.ErrNotFound) {
 		s.notFound(w, fmt.Errorf("repo not found"))
 		return
 	}

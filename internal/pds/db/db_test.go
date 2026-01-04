@@ -1,4 +1,4 @@
-package foundation
+package db
 
 import (
 	"sync"
@@ -21,7 +21,7 @@ func testDB(t *testing.T) *DB {
 	var err error
 	setupOnce.Do(func() {
 		testingDB, err = New(tracer, Config{
-			ClusterFile: "../../foundation.cluster",
+			ClusterFile: "../../../foundation.cluster",
 			APIVersion:  730,
 		})
 	})

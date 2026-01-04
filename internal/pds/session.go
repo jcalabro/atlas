@@ -13,7 +13,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/jcalabro/atlas/internal/foundation"
+	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/types"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -68,12 +68,12 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 			actor, err = s.db.GetActorByEmail(ctx, host.hostname, identifier)
 		}
 	}
-	if err != nil && !errors.Is(err, foundation.ErrNotFound) {
+	if err != nil && !errors.Is(err, db.ErrNotFound) {
 		s.internalErr(w, fmt.Errorf("failed to lookup account: %w", err))
 		return
 	}
 
-	if actor == nil || errors.Is(err, foundation.ErrNotFound) {
+	if actor == nil || errors.Is(err, db.ErrNotFound) {
 		s.badRequest(w, fmt.Errorf("invalid account identifier or password"))
 		return
 	}
