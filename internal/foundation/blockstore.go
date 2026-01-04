@@ -24,6 +24,10 @@ type blockstore struct {
 	// writeTx is the FDB transaction for write mode.
 	// When non-nil, all reads and writes happen within this transaction.
 	writeTx *fdb.Transaction
+
+	// rev is the revision being written. Used to populate the blocks_by_rev index.
+	// Only set for write blockstores.
+	rev string
 }
 
 // newReadBlockstore creates a read-only blockstore bound to an FDB read transaction.
@@ -38,6 +42,7 @@ func (db *DB) newReadBlockstore(did string, tx fdb.ReadTransaction) *blockstore 
 
 // newWriteBlockstore creates a blockstore bound to an FDB write transaction.
 // All reads and writes will happen within this transaction.
+// Use SetRev to set the revision for secondary index writes.
 func (db *DB) newWriteBlockstore(did string, tx fdb.Transaction) *blockstore {
 	return &blockstore{
 		db:      db,
@@ -45,6 +50,12 @@ func (db *DB) newWriteBlockstore(did string, tx fdb.Transaction) *blockstore {
 		did:     did,
 		writeTx: &tx,
 	}
+}
+
+// SetRev sets the revision for the blockstore. When set, Put and PutMany will
+// populate the blocks_by_rev secondary index for incremental sync.
+func (bs *blockstore) SetRev(rev string) {
+	bs.rev = rev
 }
 
 // Get retrieves a block by its CID.
@@ -133,8 +144,16 @@ func (bs *blockstore) Put(ctx context.Context, blk blocks.Block) error {
 		return fmt.Errorf("blockstore put requires a transaction")
 	}
 
+	// write to primary index
 	key := pack(bs.db.blockDir.blocks, bs.did, blk.Cid().Bytes())
 	(*bs.writeTx).Set(key, blk.RawData())
+
+	// write to secondary index for incremental sync
+	if bs.rev != "" {
+		revKey := pack(bs.db.blockDir.blocksByRev, bs.did, bs.rev, blk.Cid().Bytes())
+		(*bs.writeTx).Set(revKey, nil)
+	}
+
 	return nil
 }
 
@@ -153,8 +172,15 @@ func (bs *blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 	}
 
 	for _, blk := range blks {
+		// write to primary index
 		key := pack(bs.db.blockDir.blocks, bs.did, blk.Cid().Bytes())
 		(*bs.writeTx).Set(key, blk.RawData())
+
+		// write to secondary index for incremental sync
+		if bs.rev != "" {
+			revKey := pack(bs.db.blockDir.blocksByRev, bs.did, bs.rev, blk.Cid().Bytes())
+			(*bs.writeTx).Set(revKey, nil)
+		}
 	}
 
 	return nil
@@ -201,6 +227,137 @@ func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) ([]bloc
 			if err != nil {
 				// skip blocks that are not found
 				continue
+			}
+			result = append(result, blk)
+		}
+
+		return result, nil
+	})
+}
+
+// GetAllBlocks retrieves all blocks for a given DID.
+func (db *DB) GetAllBlocks(ctx context.Context, did string) ([]blocks.Block, error) {
+	_, span := db.tracer.Start(ctx, "GetAllBlocks")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("did", did))
+
+	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
+		// create range for all blocks with this DID prefix
+		rangeBegin := pack(db.blockDir.blocks, did)
+		rangeEnd := pack(db.blockDir.blocks, did+"\xff")
+
+		kr := fdb.KeyRange{Begin: rangeBegin, End: rangeEnd}
+
+		var result []blocks.Block
+		iter := tx.GetRange(kr, fdb.RangeOptions{}).Iterator()
+		for iter.Advance() {
+			kv, err := iter.Get()
+			if err != nil {
+				return nil, fmt.Errorf("failed to iterate blocks: %w", err)
+			}
+
+			// extract CID bytes from the key tuple (did, cid_bytes)
+			tup, err := db.blockDir.blocks.Unpack(kv.Key)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unpack block key: %w", err)
+			}
+			if len(tup) < 2 {
+				continue
+			}
+
+			cidBytes, ok := tup[1].([]byte)
+			if !ok {
+				continue
+			}
+
+			_, c, err := cid.CidFromBytes(cidBytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse cid from key: %w", err)
+			}
+
+			blk, err := blocks.NewBlockWithCid(kv.Value, c)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create block: %w", err)
+			}
+
+			result = append(result, blk)
+		}
+
+		return result, nil
+	})
+}
+
+// GetBlocksSince retrieves all blocks added after the given revision.
+// Used for incremental sync via the `since` parameter.
+func (db *DB) GetBlocksSince(ctx context.Context, did string, sinceRev string) ([]blocks.Block, error) {
+	_, span := db.tracer.Start(ctx, "GetBlocksSince")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("did", did),
+		attribute.String("since", sinceRev),
+	)
+
+	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
+		// query the secondary index for all revisions after sinceRev
+		// use sinceRev + "\x00" to exclude the exact sinceRev
+		rangeBegin := pack(db.blockDir.blocksByRev, did, sinceRev+"\x00")
+		rangeEnd := pack(db.blockDir.blocksByRev, did+"\xff")
+
+		kr := fdb.KeyRange{Begin: rangeBegin, End: rangeEnd}
+
+		// collect all CIDs from the secondary index
+		var cids []cid.Cid
+		iter := tx.GetRange(kr, fdb.RangeOptions{}).Iterator()
+		for iter.Advance() {
+			kv, err := iter.Get()
+			if err != nil {
+				return nil, fmt.Errorf("failed to iterate blocks_by_rev: %w", err)
+			}
+
+			// extract CID bytes from the key tuple (did, rev, cid_bytes)
+			tup, err := db.blockDir.blocksByRev.Unpack(kv.Key)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unpack blocks_by_rev key: %w", err)
+			}
+			if len(tup) < 3 {
+				continue
+			}
+
+			cidBytes, ok := tup[2].([]byte)
+			if !ok {
+				continue
+			}
+
+			_, c, err := cid.CidFromBytes(cidBytes)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse cid from key: %w", err)
+			}
+
+			cids = append(cids, c)
+		}
+
+		if len(cids) == 0 {
+			return nil, nil
+		}
+
+		// fetch the actual block data from the primary index
+		result := make([]blocks.Block, 0, len(cids))
+		for _, c := range cids {
+			key := pack(db.blockDir.blocks, did, c.Bytes())
+			val, err := tx.Get(key).Get()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get block: %w", err)
+			}
+			if val == nil {
+				// block was deleted, skip
+				continue
+			}
+
+			blk, err := blocks.NewBlockWithCid(val, c)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create block: %w", err)
 			}
 			result = append(result, blk)
 		}

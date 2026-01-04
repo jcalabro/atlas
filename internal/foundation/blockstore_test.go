@@ -438,3 +438,322 @@ func TestBlockstore_TransactionRollback(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestBlockstore_SetRev(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := t.Context()
+
+	t.Run("SetRev populates secondary index on Put", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:setrev1"
+		rev := "3jqfcqzm3fo2i"
+		blk := makeTestBlock(t, []byte("setrev test data"))
+
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			bs.SetRev(rev)
+			return bs.Put(ctx, blk)
+		})
+		require.NoError(t, err)
+
+		// verify block exists in primary index
+		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
+			bs := db.newReadBlockstore(did, tx)
+			has, err := bs.Has(ctx, blk.Cid())
+			require.NoError(t, err)
+			require.True(t, has)
+			return nil, nil
+		})
+		require.NoError(t, err)
+
+		// verify secondary index was populated via GetBlocksSince
+		blocksSince, err := db.GetBlocksSince(ctx, did, "")
+		require.NoError(t, err)
+		require.Len(t, blocksSince, 1)
+		require.Equal(t, blk.Cid(), blocksSince[0].Cid())
+	})
+
+	t.Run("SetRev populates secondary index on PutMany", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:setrev2"
+		rev := "3jqfcqzm3fo2j"
+		blk1 := makeTestBlock(t, []byte("setrev putmany 1"))
+		blk2 := makeTestBlock(t, []byte("setrev putmany 2"))
+
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			bs.SetRev(rev)
+			return bs.PutMany(ctx, []blocks.Block{blk1, blk2})
+		})
+		require.NoError(t, err)
+
+		// verify secondary index was populated
+		blocksSince, err := db.GetBlocksSince(ctx, did, "")
+		require.NoError(t, err)
+		require.Len(t, blocksSince, 2)
+
+		cidSet := make(map[string]bool)
+		for _, blk := range blocksSince {
+			cidSet[blk.Cid().String()] = true
+		}
+		require.True(t, cidSet[blk1.Cid().String()])
+		require.True(t, cidSet[blk2.Cid().String()])
+	})
+
+	t.Run("no rev means no secondary index writes", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:setrev3"
+		blk := makeTestBlock(t, []byte("no rev test"))
+
+		// put without setting rev
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			// don't call SetRev
+			return bs.Put(ctx, blk)
+		})
+		require.NoError(t, err)
+
+		// block exists in primary index
+		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
+			bs := db.newReadBlockstore(did, tx)
+			has, err := bs.Has(ctx, blk.Cid())
+			require.NoError(t, err)
+			require.True(t, has)
+			return nil, nil
+		})
+		require.NoError(t, err)
+
+		// but GetBlocksSince returns nothing (no secondary index entry)
+		blocksSince, err := db.GetBlocksSince(ctx, did, "")
+		require.NoError(t, err)
+		require.Len(t, blocksSince, 0)
+	})
+}
+
+func TestGetAllBlocks(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := t.Context()
+
+	t.Run("returns all blocks for a DID", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:getall1"
+		blk1 := makeTestBlock(t, []byte("getall block 1"))
+		blk2 := makeTestBlock(t, []byte("getall block 2"))
+		blk3 := makeTestBlock(t, []byte("getall block 3"))
+
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			return bs.PutMany(ctx, []blocks.Block{blk1, blk2, blk3})
+		})
+		require.NoError(t, err)
+
+		allBlocks, err := db.GetAllBlocks(ctx, did)
+		require.NoError(t, err)
+		require.Len(t, allBlocks, 3)
+
+		cidSet := make(map[string]bool)
+		for _, blk := range allBlocks {
+			cidSet[blk.Cid().String()] = true
+		}
+		require.True(t, cidSet[blk1.Cid().String()])
+		require.True(t, cidSet[blk2.Cid().String()])
+		require.True(t, cidSet[blk3.Cid().String()])
+	})
+
+	t.Run("returns empty for DID with no blocks", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:getall2"
+
+		allBlocks, err := db.GetAllBlocks(ctx, did)
+		require.NoError(t, err)
+		require.Len(t, allBlocks, 0)
+	})
+
+	t.Run("blocks are isolated per DID", func(t *testing.T) {
+		t.Parallel()
+
+		did1 := "did:plc:getall3a"
+		did2 := "did:plc:getall3b"
+		blk1 := makeTestBlock(t, []byte("did1 block"))
+		blk2 := makeTestBlock(t, []byte("did2 block"))
+
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs1 := db.newWriteBlockstore(did1, tx)
+			if err := bs1.Put(ctx, blk1); err != nil {
+				return err
+			}
+			bs2 := db.newWriteBlockstore(did2, tx)
+			return bs2.Put(ctx, blk2)
+		})
+		require.NoError(t, err)
+
+		blocks1, err := db.GetAllBlocks(ctx, did1)
+		require.NoError(t, err)
+		require.Len(t, blocks1, 1)
+		require.Equal(t, blk1.Cid(), blocks1[0].Cid())
+
+		blocks2, err := db.GetAllBlocks(ctx, did2)
+		require.NoError(t, err)
+		require.Len(t, blocks2, 1)
+		require.Equal(t, blk2.Cid(), blocks2[0].Cid())
+	})
+}
+
+func TestGetBlocksSince(t *testing.T) {
+	t.Parallel()
+	db := testDB(t)
+	ctx := t.Context()
+
+	t.Run("returns blocks after specified revision", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:since1"
+		rev1 := "3jqfcqzm3fo21"
+		rev2 := "3jqfcqzm3fo22"
+		rev3 := "3jqfcqzm3fo23"
+
+		blk1 := makeTestBlock(t, []byte("rev1 block"))
+		blk2 := makeTestBlock(t, []byte("rev2 block"))
+		blk3 := makeTestBlock(t, []byte("rev3 block"))
+
+		// write blocks with different revisions
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			bs.SetRev(rev1)
+			if err := bs.Put(ctx, blk1); err != nil {
+				return err
+			}
+
+			bs.SetRev(rev2)
+			if err := bs.Put(ctx, blk2); err != nil {
+				return err
+			}
+
+			bs.SetRev(rev3)
+			return bs.Put(ctx, blk3)
+		})
+		require.NoError(t, err)
+
+		// get blocks since rev1 (should return rev2 and rev3 blocks)
+		blocksSince, err := db.GetBlocksSince(ctx, did, rev1)
+		require.NoError(t, err)
+		require.Len(t, blocksSince, 2)
+
+		cidSet := make(map[string]bool)
+		for _, blk := range blocksSince {
+			cidSet[blk.Cid().String()] = true
+		}
+		require.False(t, cidSet[blk1.Cid().String()], "rev1 block should not be included")
+		require.True(t, cidSet[blk2.Cid().String()], "rev2 block should be included")
+		require.True(t, cidSet[blk3.Cid().String()], "rev3 block should be included")
+	})
+
+	t.Run("returns empty when since equals latest revision", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:since2"
+		rev := "3jqfcqzm3fo2x"
+		blk := makeTestBlock(t, []byte("latest rev block"))
+
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			bs.SetRev(rev)
+			return bs.Put(ctx, blk)
+		})
+		require.NoError(t, err)
+
+		// get blocks since the current rev (should return nothing)
+		blocksSince, err := db.GetBlocksSince(ctx, did, rev)
+		require.NoError(t, err)
+		require.Len(t, blocksSince, 0)
+	})
+
+	t.Run("returns all blocks when since is empty", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:since3"
+		rev := "3jqfcqzm3fo2y"
+		blk1 := makeTestBlock(t, []byte("block A"))
+		blk2 := makeTestBlock(t, []byte("block B"))
+
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			bs.SetRev(rev)
+			return bs.PutMany(ctx, []blocks.Block{blk1, blk2})
+		})
+		require.NoError(t, err)
+
+		// empty since should return all blocks in secondary index
+		blocksSince, err := db.GetBlocksSince(ctx, did, "")
+		require.NoError(t, err)
+		require.Len(t, blocksSince, 2)
+	})
+
+	t.Run("handles deleted blocks gracefully", func(t *testing.T) {
+		t.Parallel()
+
+		did := "did:plc:since4"
+		rev := "3jqfcqzm3fo2z"
+		blk := makeTestBlock(t, []byte("to be deleted"))
+
+		// put block with rev
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			bs.SetRev(rev)
+			return bs.Put(ctx, blk)
+		})
+		require.NoError(t, err)
+
+		// delete the block from primary index (but secondary index entry remains)
+		err = db.Transact(func(tx fdb.Transaction) error {
+			bs := db.newWriteBlockstore(did, tx)
+			return bs.DeleteBlock(ctx, blk.Cid())
+		})
+		require.NoError(t, err)
+
+		// GetBlocksSince should skip deleted blocks
+		blocksSince, err := db.GetBlocksSince(ctx, did, "")
+		require.NoError(t, err)
+		require.Len(t, blocksSince, 0, "deleted block should be skipped")
+	})
+
+	t.Run("blocks are isolated per DID", func(t *testing.T) {
+		t.Parallel()
+
+		did1 := "did:plc:since5a"
+		did2 := "did:plc:since5b"
+		rev := "3jqfcqzm3fo30"
+		blk1 := makeTestBlock(t, []byte("did1 since block"))
+		blk2 := makeTestBlock(t, []byte("did2 since block"))
+
+		err := db.Transact(func(tx fdb.Transaction) error {
+			bs1 := db.newWriteBlockstore(did1, tx)
+			bs1.SetRev(rev)
+			if err := bs1.Put(ctx, blk1); err != nil {
+				return err
+			}
+
+			bs2 := db.newWriteBlockstore(did2, tx)
+			bs2.SetRev(rev)
+			return bs2.Put(ctx, blk2)
+		})
+		require.NoError(t, err)
+
+		blocks1, err := db.GetBlocksSince(ctx, did1, "")
+		require.NoError(t, err)
+		require.Len(t, blocks1, 1)
+		require.Equal(t, blk1.Cid(), blocks1[0].Cid())
+
+		blocks2, err := db.GetBlocksSince(ctx, did2, "")
+		require.NoError(t, err)
+		require.Len(t, blocks2, 1)
+		require.Equal(t, blk2.Cid(), blocks2[0].Cid())
+	})
+}

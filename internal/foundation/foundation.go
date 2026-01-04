@@ -57,6 +57,10 @@ type records struct {
 type blockDir struct {
 	// Primary index. Blocks are keyed by (did, cid)
 	blocks directory.DirectorySubspace
+
+	// Secondary index. Blocks keyed by (did, rev, cid) for incremental sync.
+	// Value is empty - this is just for querying which CIDs were added in each rev.
+	blocksByRev directory.DirectorySubspace
 }
 
 func New(tracer trace.Tracer, cfg Config) (*DB, error) {
@@ -119,6 +123,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	db.blockDir.blocks, err = directory.CreateOrOpen(db.db, []string{"blocks"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create blocks directory: %w", err)
+	}
+
+	db.blockDir.blocksByRev, err = directory.CreateOrOpen(db.db, []string{"blocks_by_rev"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create blocks_by_rev directory: %w", err)
 	}
 
 	return db, nil

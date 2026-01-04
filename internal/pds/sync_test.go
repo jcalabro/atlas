@@ -242,6 +242,294 @@ func TestHandleGetRepoStatus(t *testing.T) {
 	})
 }
 
+func TestHandleGetRepo(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	router := srv.router()
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	t.Run("success - returns empty repo CAR", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:getrepo1", "getrepo1@example.com", "getrepo1.dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRepo?did=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/vnd.ipld.car", w.Header().Get("Content-Type"))
+
+		// verify it's a valid CAR file
+		carReader, err := car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+		require.NoError(t, err)
+		require.Len(t, carReader.Header.Roots, 1)
+		require.Equal(t, actor.Head, carReader.Header.Roots[0].String())
+
+		// empty repo should have at least commit and MST root blocks
+		blockCount := 0
+		for {
+			_, err := carReader.Next()
+			if err != nil {
+				break
+			}
+			blockCount++
+		}
+		require.GreaterOrEqual(t, blockCount, 1, "should have at least the commit block")
+	})
+
+	t.Run("success - returns repo with records", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:getrepo2", "getrepo2@example.com", "getrepo2.dev.atlaspds.dev")
+
+		// create some records
+		recordCIDs := make(map[string]bool)
+		for i := range 3 {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": "app.bsky.feed.post",
+				"rkey":       tid.String(),
+				"record": map[string]any{
+					"$type":     "app.bsky.feed.post",
+					"text":      fmt.Sprintf("Test post %d for getRepo", i),
+					"createdAt": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			// reload actor to get current head before each create
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+
+			var createOut atproto.RepoCreateRecord_Output
+			err = json.Unmarshal(w.Body.Bytes(), &createOut)
+			require.NoError(t, err)
+			recordCIDs[createOut.Cid] = true
+		}
+
+		// reload actor to get current head
+		actor, err := srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// get the repo
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRepo?did=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/vnd.ipld.car", w.Header().Get("Content-Type"))
+
+		// verify it's a valid CAR file with all blocks
+		carReader, err := car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+		require.NoError(t, err)
+		require.Len(t, carReader.Header.Roots, 1)
+		require.Equal(t, actor.Head, carReader.Header.Roots[0].String())
+
+		// collect all block CIDs from the CAR
+		carCIDs := make(map[string]bool)
+		for {
+			blk, err := carReader.Next()
+			if err != nil {
+				break
+			}
+			carCIDs[blk.Cid().String()] = true
+		}
+
+		// verify all record CIDs are in the CAR
+		for recordCID := range recordCIDs {
+			require.True(t, carCIDs[recordCID], "record CID %s should be in CAR", recordCID)
+		}
+
+		// should have more blocks than just the records (commits, MST nodes)
+		require.Greater(t, len(carCIDs), len(recordCIDs), "should have more blocks than just records")
+	})
+
+	t.Run("error - missing did parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRepo", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid did format", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRepo?did=not-a-did", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - repo not found", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRepo?did=did:plc:nonexistent", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("success - since parameter returns incremental blocks", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:getreposince1", "getreposince1@example.com", "getreposince1.dev.atlaspds.dev")
+		initialRev := actor.Rev
+
+		// get full repo first to count initial blocks
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRepo?did=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		carReader, err := car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+		require.NoError(t, err)
+		initialBlockCount := 0
+		for {
+			_, err := carReader.Next()
+			if err != nil {
+				break
+			}
+			initialBlockCount++
+		}
+
+		// create some records (which creates new blocks)
+		for i := range 3 {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": "app.bsky.feed.post",
+				"rkey":       tid.String(),
+				"record": map[string]any{
+					"$type":     "app.bsky.feed.post",
+					"text":      fmt.Sprintf("Test post %d for since", i),
+					"createdAt": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			// reload actor to get current head before each create
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+		}
+
+		// reload actor
+		actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// get full repo to see total blocks
+		w = httptest.NewRecorder()
+		url = fmt.Sprintf("/xrpc/com.atproto.sync.getRepo?did=%s", actor.Did)
+		req = httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		carReader, err = car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+		require.NoError(t, err)
+		totalBlockCount := 0
+		for {
+			_, err := carReader.Next()
+			if err != nil {
+				break
+			}
+			totalBlockCount++
+		}
+		require.Greater(t, totalBlockCount, initialBlockCount, "should have more blocks after creating records")
+
+		// now get incremental blocks since initial rev
+		w = httptest.NewRecorder()
+		url = fmt.Sprintf("/xrpc/com.atproto.sync.getRepo?did=%s&since=%s", actor.Did, initialRev)
+		req = httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/vnd.ipld.car", w.Header().Get("Content-Type"))
+
+		carReader, err = car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+		require.NoError(t, err)
+		require.Len(t, carReader.Header.Roots, 1)
+		require.Equal(t, actor.Head, carReader.Header.Roots[0].String())
+
+		sinceBlockCount := 0
+		for {
+			_, err := carReader.Next()
+			if err != nil {
+				break
+			}
+			sinceBlockCount++
+		}
+
+		// incremental should return fewer blocks than total
+		require.Greater(t, sinceBlockCount, 0, "should have some blocks since initial rev")
+		require.Less(t, sinceBlockCount, totalBlockCount, "since should return fewer blocks than full repo")
+	})
+
+	t.Run("success - since with current rev returns empty", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:getreposince2", "getreposince2@example.com", "getreposince2.dev.atlaspds.dev")
+
+		// get repo since the current rev (should return no blocks)
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRepo?did=%s&since=%s", actor.Did, actor.Rev)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/vnd.ipld.car", w.Header().Get("Content-Type"))
+
+		carReader, err := car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+		require.NoError(t, err)
+
+		blockCount := 0
+		for {
+			_, err := carReader.Next()
+			if err != nil {
+				break
+			}
+			blockCount++
+		}
+		require.Equal(t, 0, blockCount, "should have no blocks when since equals current rev")
+	})
+}
+
 func TestHandleGetBlocks(t *testing.T) {
 	t.Parallel()
 	srv := testServer(t)

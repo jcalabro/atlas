@@ -44,7 +44,12 @@ func (db *DB) InitRepo(ctx context.Context, actor *types.Actor) (cid.Cid, string
 	}
 
 	res, err := transaction(db.db, func(tx fdb.Transaction) (*result, error) {
+		// compute rev for the initial commit
+		clk := syntax.NewTIDClock(0)
+		newRev := clk.Next().String()
+
 		bs := db.newWriteBlockstore(actor.Did, tx)
+		bs.SetRev(newRev)
 
 		// create an empty MST tree
 		tree := mst.NewEmptyTree()
@@ -56,13 +61,12 @@ func (db *DB) InitRepo(ctx context.Context, actor *types.Actor) (cid.Cid, string
 		}
 
 		// create the commit
-		clk := syntax.NewTIDClock(0)
 		commit := repo.Commit{
 			DID:     actor.Did,
 			Version: repo.ATPROTO_REPO_VERSION,
 			Prev:    nil,
 			Data:    *rootCID,
-			Rev:     clk.Next().String(),
+			Rev:     newRev,
 		}
 
 		// sign the commit
@@ -149,6 +153,10 @@ func (db *DB) CreateRecord(
 			return nil, fmt.Errorf("failed to load commit: %w", err)
 		}
 
+		// compute new rev and set it on the blockstore for secondary index writes
+		newRev := clk.Next().String()
+		bs.SetRev(newRev)
+
 		// load the MST from the commit's data CID
 		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
 		if err != nil {
@@ -188,7 +196,7 @@ func (db *DB) CreateRecord(
 			Version: repo.ATPROTO_REPO_VERSION,
 			Prev:    &headCID,
 			Data:    *rootCID,
-			Rev:     clk.Next().String(),
+			Rev:     newRev,
 		}
 
 		privkey, err := atcrypto.ParsePrivateBytesK256(actor.SigningKey)
@@ -279,6 +287,10 @@ func (db *DB) DeleteRecord(
 			return nil, fmt.Errorf("failed to load commit: %w", err)
 		}
 
+		// compute new rev and set it on the blockstore for secondary index writes
+		newRev := clk.Next().String()
+		bs.SetRev(newRev)
+
 		// load the MST from the commit's data CID
 		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
 		if err != nil {
@@ -303,7 +315,7 @@ func (db *DB) DeleteRecord(
 			Version: repo.ATPROTO_REPO_VERSION,
 			Prev:    &headCID,
 			Data:    *rootCID,
-			Rev:     clk.Next().String(),
+			Rev:     newRev,
 		}
 
 		privkey, err := atcrypto.ParsePrivateBytesK256(actor.SigningKey)
