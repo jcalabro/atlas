@@ -185,3 +185,26 @@ func (bs *blockstore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error) {
 
 // HashOnRead is a no-op
 func (bs *blockstore) HashOnRead(enabled bool) {}
+
+// GetBlocks retrieves multiple blocks by their CIDs for a given DID.
+// Returns the blocks that were found. Missing blocks are silently skipped.
+func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) ([]blocks.Block, error) {
+	_, span := db.tracer.Start(ctx, "GetBlocks")
+	defer span.End()
+
+	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]blocks.Block, error) {
+		bs := db.newReadBlockstore(did, tx)
+		result := make([]blocks.Block, 0, len(cids))
+
+		for _, c := range cids {
+			blk, err := bs.Get(ctx, c)
+			if err != nil {
+				// skip blocks that are not found
+				continue
+			}
+			result = append(result, blk)
+		}
+
+		return result, nil
+	})
+}

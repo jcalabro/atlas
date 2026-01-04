@@ -291,6 +291,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("POST /xrpc/com.atproto.server.deleteSession", s.authMiddleware(s.handleDeleteSession))
 
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.listRepos", s.handleListRepos)
+	mux.HandleFunc("GET /xrpc/com.atproto.sync.getBlocks", s.handleGetBlocks)
 
 	return mux
 }

@@ -74,3 +74,4 @@ We say it's high availability because the system is designed to be run with mult
 - Comments that are a single sentence should never end in a period
 - Always use `any` instead of `interface{}`. There is a linter rule to validate this.
 - Never use `*.bsky.social` domains/handles. Instead, use `*.dev.atlaspds.net`.
+- Always use the new go for loop syntax `for i := range count`, or just `for range count`
