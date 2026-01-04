@@ -65,7 +65,7 @@ func (bs *blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) 
 	} else if bs.readTx != nil {
 		val, err = bs.readTx.Get(key).Get()
 	} else {
-		return nil, fmt.Errorf("blockstore get requires a transaction")
+		return nil, fmt.Errorf("blockstore.get requires either a read or write transaction")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block: %w", err)
@@ -88,7 +88,7 @@ func (bs *blockstore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	} else if bs.readTx != nil {
 		val, err = bs.readTx.Get(key).Get()
 	} else {
-		return false, fmt.Errorf("blockstore has requires a transaction")
+		return false, fmt.Errorf("blockstore.has requires either a read or write transaction")
 	}
 	if err != nil {
 		return false, fmt.Errorf("failed to check block: %w", err)
@@ -106,11 +106,10 @@ func (bs *blockstore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 	return len(blk.RawData()), nil
 }
 
-// Put stores a block. In transactional mode, writes directly to FDB.
-// In read-only mode, this method will panic as writes require a transaction.
+// Put stores a block (requires the blockstore is in write transaction mode)
 func (bs *blockstore) Put(ctx context.Context, blk blocks.Block) error {
 	if bs.writeTx == nil {
-		return fmt.Errorf("blockstore put requires a transaction")
+		return fmt.Errorf("blockstore put requires a write transaction")
 	}
 
 	// write to primary index
@@ -129,7 +128,7 @@ func (bs *blockstore) Put(ctx context.Context, blk blocks.Block) error {
 // PutMany stores multiple blocks. Requires transactional mode.
 func (bs *blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 	if bs.writeTx == nil {
-		return fmt.Errorf("blockstore put_many requires a transaction")
+		return fmt.Errorf("blockstore put_many requires a write transaction")
 	}
 
 	for _, blk := range blks {
@@ -150,7 +149,7 @@ func (bs *blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 // DeleteBlock removes a block from the store. Requires transactional mode.
 func (bs *blockstore) DeleteBlock(ctx context.Context, c cid.Cid) error {
 	if bs.writeTx == nil {
-		return fmt.Errorf("blockstore delete_block requires a transaction")
+		return fmt.Errorf("blockstore delete_block requires a write transaction")
 	}
 
 	key := pack(bs.db.blockDir.blocks, bs.did, c.Bytes())

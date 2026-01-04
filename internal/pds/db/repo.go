@@ -239,6 +239,175 @@ func (db *DB) CreateRecord(
 	return
 }
 
+// PutRecordResult contains the result of an atomic record put (create or update)
+type PutRecordResult struct {
+	RecordCID cid.Cid
+	CommitCID cid.Cid
+	Rev       string
+}
+
+// PutRecord atomically creates or updates a record in the repo. All MST operations,
+// block writes, secondary index updates, and actor updates happen within a
+// single FDB write transaction.
+func (db *DB) PutRecord(
+	ctx context.Context,
+	actor *types.Actor,
+	record *types.Record,
+	cborBytes []byte,
+	swapRecord *string,
+	swapCommit *string,
+) (result *PutRecordResult, err error) {
+	_, span, done := db.observe(ctx, "PutRecord")
+	defer func() { done(err) }()
+
+	span.SetAttributes(
+		attribute.String("did", actor.Did),
+		attribute.String("handle", actor.Handle),
+		attribute.String("uri", record.URI().String()),
+		attribute.Int("record_size", len(record.Value)),
+		attribute.Int("cbor_size", len(cborBytes)),
+		metrics.NilString("swap_record", swapRecord),
+		metrics.NilString("swap_commit", swapCommit),
+	)
+
+	result, err = transaction(db.db, func(tx fdb.Transaction) (*PutRecordResult, error) {
+		// check swapCommit - verify the current head hasn't been changed by
+		// another process/thread attempting to write concurrently
+		existing, err := db.getActorByDIDTx(tx, actor.Did)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current head: %w", err)
+		}
+
+		if swapCommit != nil && existing.Head != *swapCommit {
+			return nil, ErrConcurrentModification
+		}
+
+		// verify head hasn't changed since we loaded the actor
+		if existing.Head != actor.Head {
+			return nil, ErrConcurrentModification
+		}
+
+		// load the existing commit to get the data CID and clock
+		headCID, err := cid.Decode(actor.Head)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse repo head CID: %w", err)
+		}
+
+		bs := db.newWriteBlockstore(actor.Did, tx)
+		commit, clk, err := loadCommit(ctx, bs, headCID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load commit: %w", err)
+		}
+
+		// compute new rev and set it on the blockstore for secondary index writes
+		newRev := clk.Next().String()
+		bs.SetRev(newRev)
+
+		// load the MST from the commit's data CID
+		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load MST: %w", err)
+		}
+
+		// check if record already exists in the MST
+		rpath := []byte(record.Collection + "/" + record.Rkey)
+		existingCID, err := tree.Get(rpath)
+		isNewRecord := err != nil || existingCID == nil
+
+		// if swapRecord is provided, verify the existing record's CID matches
+		if swapRecord != nil {
+			if isNewRecord {
+				return nil, fmt.Errorf("swapRecord provided but record does not exist")
+			}
+			if existingCID.String() != *swapRecord {
+				return nil, ErrConcurrentModification
+			}
+		}
+
+		// store the record block and get its CID
+		recordCID, err := cidBuilder.Sum(cborBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to compute record CID: %w", err)
+		}
+
+		recordBlock, err := blocks.NewBlockWithCid(cborBytes, recordCID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create record block: %w", err)
+		}
+
+		if err := bs.Put(ctx, recordBlock); err != nil {
+			return nil, fmt.Errorf("failed to store record block: %w", err)
+		}
+
+		// for updates, remove the old record first, then insert
+		// MST doesn't have an Update method, so we Remove then Insert
+		if !isNewRecord {
+			if _, err := tree.Remove(rpath); err != nil {
+				return nil, fmt.Errorf("failed to remove old record from MST: %w", err)
+			}
+		}
+
+		if _, err := tree.Insert(rpath, recordCID); err != nil {
+			return nil, fmt.Errorf("failed to insert record into MST: %w", err)
+		}
+
+		// write dirty MST blocks and get new root CID
+		rootCID, err := tree.WriteDiffBlocks(ctx, bs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write MST blocks: %w", err)
+		}
+
+		// create and sign new commit
+		newCommit := repo.Commit{
+			DID:     actor.Did,
+			Version: repo.ATPROTO_REPO_VERSION,
+			Prev:    &headCID,
+			Data:    *rootCID,
+			Rev:     newRev,
+		}
+
+		privkey, err := atcrypto.ParsePrivateBytesK256(actor.SigningKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse signing key: %w", err)
+		}
+		if err := newCommit.Sign(privkey); err != nil {
+			return nil, fmt.Errorf("failed to sign commit: %w", err)
+		}
+
+		// store the commit block
+		commitCID, err := storeCommit(ctx, bs, &newCommit)
+		if err != nil {
+			return nil, fmt.Errorf("failed to store commit: %w", err)
+		}
+
+		// save record to the records secondary index
+		record.Cid = recordCID.String()
+		if err := db.saveRecordTx(tx, record); err != nil {
+			return nil, fmt.Errorf("failed to save record: %w", err)
+		}
+
+		// only update collection count for new records
+		if isNewRecord {
+			db.incrementCollectionCountTx(tx, actor.Did, record.Collection)
+		}
+
+		// update actor with new head and rev
+		actor.Head = commitCID.String()
+		actor.Rev = newCommit.Rev
+		if err := db.saveActorTx(tx, actor); err != nil {
+			return nil, fmt.Errorf("failed to save actor: %w", err)
+		}
+
+		return &PutRecordResult{
+			RecordCID: recordCID,
+			CommitCID: commitCID,
+			Rev:       newCommit.Rev,
+		}, nil
+	})
+
+	return
+}
+
 // DeleteRecordResult contains the result of an atomic record deletion.
 type DeleteRecordResult struct {
 	CommitCID cid.Cid

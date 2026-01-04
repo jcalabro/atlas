@@ -314,6 +314,12 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// verify user is attempting to write to the repo they own
+	if in.Repo != actor.Did && in.Repo != actor.Handle {
+		s.forbidden(w, fmt.Errorf("forbidden"))
+		return
+	}
+
 	switch {
 	case in.Repo == "":
 		s.badRequest(w, fmt.Errorf("repo is required"))
@@ -323,12 +329,6 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	case in.Rkey == "":
 		s.badRequest(w, fmt.Errorf("rkey is required"))
-		return
-	}
-
-	// verify user is attempting to write to the repo they own
-	if in.Repo != actor.Did && in.Repo != actor.Handle {
-		s.forbidden(w, fmt.Errorf("forbidden"))
 		return
 	}
 
@@ -386,6 +386,123 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 	s.jsonOK(w, &atproto.RepoDeleteRecord_Output{
 		Commit: &atproto.RepoDefs_CommitMeta{Cid: result.CommitCID.String(), Rev: result.Rev},
 	})
+}
+
+// putRecordInput mirrors atproto.RepoPutRecord_Input but with
+// a raw json.RawMessage for the record field so we can handle arbitrary records.
+type putRecordInput struct {
+	Repo       string          `json:"repo"`
+	Collection string          `json:"collection"`
+	Rkey       string          `json:"rkey"`
+	Validate   *bool           `json:"validate,omitempty"`
+	Record     json.RawMessage `json:"record"`
+	SwapRecord *string         `json:"swapRecord,omitempty"`
+	SwapCommit *string         `json:"swapCommit,omitempty"`
+}
+
+func (s *server) handlePutRecord(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	actor := actorFromContext(ctx)
+	if actor == nil {
+		s.internalErr(w, fmt.Errorf("actor not found in context"))
+		return
+	}
+
+	var in putRecordInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	// verify user is attempting to write to the repo they own
+	if in.Repo != actor.Did && in.Repo != actor.Handle {
+		s.forbidden(w, fmt.Errorf("forbidden"))
+		return
+	}
+
+	// validate the input
+	switch {
+	case in.Repo == "":
+		s.badRequest(w, fmt.Errorf("repo is required"))
+		return
+	case in.Collection == "":
+		s.badRequest(w, fmt.Errorf("collection is required"))
+		return
+	case in.Rkey == "":
+		s.badRequest(w, fmt.Errorf("rkey is required"))
+		return
+	case len(in.Record) == 0:
+		s.badRequest(w, fmt.Errorf("record is required"))
+		return
+	}
+
+	if _, err := syntax.ParseNSID(in.Collection); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid collection nsid: %w", err))
+		return
+	}
+
+	if _, err := syntax.ParseRecordKey(in.Rkey); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid rkey: %w", err))
+		return
+	}
+
+	// validate swapRecord CID if provided
+	if in.SwapRecord != nil {
+		if _, err := syntax.ParseCID(*in.SwapRecord); err != nil {
+			s.badRequest(w, fmt.Errorf("invalid swapRecord cid: %w", err))
+			return
+		}
+	}
+
+	// parse the record JSON and convert to CBOR
+	recordData, err := atdata.UnmarshalJSON(in.Record)
+	if err != nil {
+		s.badRequest(w, fmt.Errorf("invalid record data: %w", err))
+		return
+	}
+
+	// ensure record has $type field matching collection
+	if recordData["$type"] == nil || recordData["$type"] == "" {
+		recordData["$type"] = in.Collection
+	}
+
+	cborBytes, err := atdata.MarshalCBOR(recordData)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to marshal record to CBOR: %w", err))
+		return
+	}
+
+	// create record entry for secondary index
+	record := &types.Record{
+		Did:        actor.Did,
+		Collection: in.Collection,
+		Rkey:       in.Rkey,
+		Value:      cborBytes,
+		CreatedAt:  timestamppb.Now(),
+	}
+
+	uri := at.FormatURI(actor.Did, in.Collection, in.Rkey)
+
+	// atomically put record: MST operations, blocks, secondary index, actor update
+	result, err := s.db.PutRecord(ctx, actor, record, cborBytes, in.SwapRecord, in.SwapCommit)
+	if err != nil {
+		if errors.Is(err, db.ErrConcurrentModification) {
+			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
+			return
+		}
+		s.internalErr(w, fmt.Errorf("failed to put record: %w", err))
+		return
+	}
+
+	resp := atproto.RepoPutRecord_Output{
+		Uri:              uri,
+		Cid:              result.RecordCID.String(),
+		Commit:           &atproto.RepoDefs_CommitMeta{Cid: result.CommitCID.String(), Rev: result.Rev},
+		ValidationStatus: util.Ptr("valid"),
+	}
+
+	s.jsonOK(w, resp)
 }
 
 func (s *server) handleDescribeRepo(w http.ResponseWriter, r *http.Request) {

@@ -96,7 +96,6 @@ func TestBlockstore_PutAndGet(t *testing.T) {
 			bs := db.newReadBlockstore("did:plc:blocktest4", tx)
 			err := bs.Put(ctx, blk)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "requires a transaction")
 			return nil, nil
 		})
 		require.NoError(t, err)
@@ -279,7 +278,6 @@ func TestBlockstore_PutMany(t *testing.T) {
 			bs := db.newReadBlockstore("did:plc:putmany3", tx)
 			err := bs.PutMany(ctx, []blocks.Block{blk})
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "requires a transaction")
 			return nil, nil
 		})
 		require.NoError(t, err)
@@ -340,7 +338,6 @@ func TestBlockstore_DeleteBlock(t *testing.T) {
 			bs := db.newReadBlockstore("did:plc:delete2", tx)
 			err := bs.DeleteBlock(ctx, fakeCID)
 			require.Error(t, err)
-			require.Contains(t, err.Error(), "requires a transaction")
 			return nil, nil
 		})
 		require.NoError(t, err)

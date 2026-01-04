@@ -901,12 +901,14 @@ func TestHandleDeleteRecord(t *testing.T) {
 		actor, session := setupTestActor(t, srv, "did:plc:deleterecord8", "deleterecord8@example.com", "deleterecord8.dev.atlaspds.dev")
 
 		testCases := []struct {
-			name  string
-			input map[string]any
+			name         string
+			input        map[string]any
+			expectedCode int
 		}{
-			{"missing repo", map[string]any{"collection": "app.bsky.feed.post", "rkey": "abc"}},
-			{"missing collection", map[string]any{"repo": actor.Did, "rkey": "abc"}},
-			{"missing rkey", map[string]any{"repo": actor.Did, "collection": "app.bsky.feed.post"}},
+			// missing repo returns 403 because the ownership check happens first
+			{"missing repo", map[string]any{"collection": "app.bsky.feed.post", "rkey": "abc"}, http.StatusForbidden},
+			{"missing collection", map[string]any{"repo": actor.Did, "rkey": "abc"}, http.StatusBadRequest},
+			{"missing rkey", map[string]any{"repo": actor.Did, "collection": "app.bsky.feed.post"}, http.StatusBadRequest},
 		}
 
 		for _, tc := range testCases {
@@ -918,7 +920,7 @@ func TestHandleDeleteRecord(t *testing.T) {
 			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
 			srv.handleDeleteRecord(w, req)
 
-			require.Equal(t, http.StatusBadRequest, w.Code, "test case: %s", tc.name)
+			require.Equal(t, tc.expectedCode, w.Code, "test case: %s", tc.name)
 		}
 	})
 
@@ -941,6 +943,481 @@ func TestHandleDeleteRecord(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}
+
+func TestHandlePutRecord(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	t.Run("success - creates new record", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord1", "putrecord1@example.com", "putrecord1.dev.atlaspds.dev")
+
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "New record via putRecord",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handlePutRecord(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out atproto.RepoPutRecord_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.NotEmpty(t, out.Uri)
+		require.NotEmpty(t, out.Cid)
+		require.Contains(t, out.Uri, actor.Did)
+		require.Contains(t, out.Uri, rkey)
+	})
+
+	t.Run("success - updates existing record", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord2", "putrecord2@example.com", "putrecord2.dev.atlaspds.dev")
+
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		// create initial record
+		createInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Original text",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		createBody, err := json.Marshal(createInput)
+		require.NoError(t, err)
+
+		w1 := httptest.NewRecorder()
+		req1 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(createBody))
+		req1 = addAuthContext(t, ctx, srv, req1, actor, session.AccessToken)
+		srv.handlePutRecord(w1, req1)
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		var createOut atproto.RepoPutRecord_Output
+		err = json.Unmarshal(w1.Body.Bytes(), &createOut)
+		require.NoError(t, err)
+		originalCid := createOut.Cid
+
+		// reload actor to get updated head
+		actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// update record with putRecord
+		updateInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Updated text",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		updateBody, err := json.Marshal(updateInput)
+		require.NoError(t, err)
+
+		w2 := httptest.NewRecorder()
+		req2 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(updateBody))
+		req2 = addAuthContext(t, ctx, srv, req2, actor, session.AccessToken)
+		srv.handlePutRecord(w2, req2)
+		require.Equal(t, http.StatusOK, w2.Code)
+
+		var updateOut atproto.RepoPutRecord_Output
+		err = json.Unmarshal(w2.Body.Bytes(), &updateOut)
+		require.NoError(t, err)
+
+		// CID should change since content changed
+		require.NotEqual(t, originalCid, updateOut.Cid)
+		require.Contains(t, updateOut.Uri, rkey)
+
+		// verify the record was updated in DB
+		uri := fmt.Sprintf("at://%s/app.bsky.feed.post/%s", actor.Did, rkey)
+		record, err := srv.db.GetRecord(ctx, uri)
+		require.NoError(t, err)
+		require.Equal(t, updateOut.Cid, record.Cid)
+	})
+
+	t.Run("success - updates with swapRecord validation", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord3", "putrecord3@example.com", "putrecord3.dev.atlaspds.dev")
+
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		// create initial record
+		createInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Original for swapRecord test",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		createBody, err := json.Marshal(createInput)
+		require.NoError(t, err)
+
+		w1 := httptest.NewRecorder()
+		req1 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(createBody))
+		req1 = addAuthContext(t, ctx, srv, req1, actor, session.AccessToken)
+		srv.handlePutRecord(w1, req1)
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		var createOut atproto.RepoPutRecord_Output
+		err = json.Unmarshal(w1.Body.Bytes(), &createOut)
+		require.NoError(t, err)
+
+		// reload actor
+		actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// update with correct swapRecord
+		updateInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"swapRecord": createOut.Cid,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Updated with swapRecord",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		updateBody, err := json.Marshal(updateInput)
+		require.NoError(t, err)
+
+		w2 := httptest.NewRecorder()
+		req2 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(updateBody))
+		req2 = addAuthContext(t, ctx, srv, req2, actor, session.AccessToken)
+		srv.handlePutRecord(w2, req2)
+
+		require.Equal(t, http.StatusOK, w2.Code)
+	})
+
+	t.Run("success - record can be retrieved after put", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord4", "putrecord4@example.com", "putrecord4.dev.atlaspds.dev")
+
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		recordText := "Retrievable record via putRecord"
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      recordText,
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handlePutRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// verify record was saved to DB
+		uri := fmt.Sprintf("at://%s/%s/%s", actor.Did, "app.bsky.feed.post", rkey)
+		record, err := srv.db.GetRecord(ctx, uri)
+		require.NoError(t, err)
+		require.NotNil(t, record)
+		require.Equal(t, actor.Did, record.Did)
+		require.Equal(t, "app.bsky.feed.post", record.Collection)
+		require.Equal(t, rkey, record.Rkey)
+	})
+
+	t.Run("error - repo mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord5", "putrecord5@example.com", "putrecord5.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       "did:plc:someoneelse",
+			"collection": "app.bsky.feed.post",
+			"rkey":       "abc123",
+			"record": map[string]any{
+				"$type": "app.bsky.feed.post",
+				"text":  "Trying to post as someone else",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handlePutRecord(w, req)
+
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("error - invalid collection NSID", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord6", "putrecord6@example.com", "putrecord6.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "not-a-valid-nsid",
+			"rkey":       "abc123",
+			"record": map[string]any{
+				"$type": "not-a-valid-nsid",
+				"text":  "Invalid collection",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handlePutRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid rkey", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord7", "putrecord7@example.com", "putrecord7.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       "invalid/rkey/with/slashes",
+			"record": map[string]any{
+				"$type": "app.bsky.feed.post",
+				"text":  "Invalid rkey",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handlePutRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - swapRecord mismatch", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord8", "putrecord8@example.com", "putrecord8.dev.atlaspds.dev")
+
+		// create initial record
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		createInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Original for swap mismatch test",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		createBody, err := json.Marshal(createInput)
+		require.NoError(t, err)
+
+		w1 := httptest.NewRecorder()
+		req1 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(createBody))
+		req1 = addAuthContext(t, ctx, srv, req1, actor, session.AccessToken)
+		srv.handlePutRecord(w1, req1)
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		// reload actor
+		actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// try to update with wrong swapRecord
+		wrongCID := "bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee"
+		updateInput := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"swapRecord": wrongCID,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "This should fail",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		updateBody, err := json.Marshal(updateInput)
+		require.NoError(t, err)
+
+		w2 := httptest.NewRecorder()
+		req2 := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(updateBody))
+		req2 = addAuthContext(t, ctx, srv, req2, actor, session.AccessToken)
+		srv.handlePutRecord(w2, req2)
+
+		require.Equal(t, http.StatusConflict, w2.Code)
+	})
+
+	t.Run("error - swapRecord provided but record does not exist", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord9", "putrecord9@example.com", "putrecord9.dev.atlaspds.dev")
+
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		// try to put with swapRecord but record doesn't exist
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"swapRecord": "bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee",
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "This should fail",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handlePutRecord(w, req)
+
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("error - missing required fields", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord10", "putrecord10@example.com", "putrecord10.dev.atlaspds.dev")
+
+		testCases := []struct {
+			name         string
+			input        map[string]any
+			expectedCode int
+		}{
+			// missing repo returns 403 because the ownership check happens first
+			{"missing repo", map[string]any{"collection": "app.bsky.feed.post", "rkey": "abc", "record": map[string]any{"text": "test"}}, http.StatusForbidden},
+			{"missing collection", map[string]any{"repo": actor.Did, "rkey": "abc", "record": map[string]any{"text": "test"}}, http.StatusBadRequest},
+			{"missing rkey", map[string]any{"repo": actor.Did, "collection": "app.bsky.feed.post", "record": map[string]any{"text": "test"}}, http.StatusBadRequest},
+			{"missing record", map[string]any{"repo": actor.Did, "collection": "app.bsky.feed.post", "rkey": "abc"}, http.StatusBadRequest},
+		}
+
+		for _, tc := range testCases {
+			body, err := json.Marshal(tc.input)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handlePutRecord(w, req)
+
+			require.Equal(t, tc.expectedCode, w.Code, "test case: %s", tc.name)
+		}
+	})
+
+	t.Run("error - no auth", func(t *testing.T) {
+		t.Parallel()
+		router := srv.hostMiddleware(srv.router())
+
+		input := map[string]any{
+			"repo":       "did:plc:noauth",
+			"collection": "app.bsky.feed.post",
+			"rkey":       "abc123",
+			"record": map[string]any{
+				"$type": "app.bsky.feed.post",
+				"text":  "No auth",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req.Host = testPDSHost
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("error - invalid swapRecord CID", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:putrecord11", "putrecord11@example.com", "putrecord11.dev.atlaspds.dev")
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       "abc123",
+			"swapRecord": "not-a-valid-cid",
+			"record": map[string]any{
+				"$type": "app.bsky.feed.post",
+				"text":  "Invalid swapRecord",
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.putRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handlePutRecord(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
 
