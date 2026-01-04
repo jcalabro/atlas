@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
-	"github.com/bluesky-social/indigo/util"
+	"github.com/bluesky-social/indigo/pkg/robusthttp"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -40,7 +40,7 @@ type ClientArgs struct {
 func NewClient(args *ClientArgs) (*Client, error) {
 	return &Client{
 		tracer: args.Tracer,
-		client: util.RobustHTTPClient(),
+		client: robusthttp.NewClient(),
 		plcURL: args.PLCURL,
 	}, nil
 }
