@@ -56,17 +56,14 @@ func (db *DB) SaveRecord(ctx context.Context, record *types.Record) error {
 	}
 
 	_, err := transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
-		if err := db.SaveRecordTx(tx, record); err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return nil, db.saveRecordTx(tx, record)
 	})
 
 	return err
 }
 
-// SaveRecordTx stores a record within an existing transaction.
-func (db *DB) SaveRecordTx(tx fdb.Transaction, record *types.Record) error {
+// saveRecordTx stores a record within an existing transaction
+func (db *DB) saveRecordTx(tx fdb.Transaction, record *types.Record) error {
 	buf, err := proto.Marshal(record)
 	if err != nil {
 		return fmt.Errorf("failed to marshal record: %w", err)

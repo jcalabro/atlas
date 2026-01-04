@@ -32,7 +32,7 @@ func TestBlockstore_PutAndGet(t *testing.T) {
 		blk := makeTestBlock(t, []byte("test data 1"))
 
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:blocktest1", tx)
+			bs := db.newWriteBlockstore("did:plc:blocktest1", tx)
 
 			// put block
 			err := bs.Put(ctx, blk)
@@ -56,14 +56,14 @@ func TestBlockstore_PutAndGet(t *testing.T) {
 
 		// put within a transaction
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:blocktest2", tx)
+			bs := db.newWriteBlockstore("did:plc:blocktest2", tx)
 			return bs.Put(ctx, blk)
 		})
 		require.NoError(t, err)
 
 		// read with a new read-only blockstore
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:blocktest2", tx)
+			bs := db.newReadBlockstore("did:plc:blocktest2", tx)
 			got, err := bs.Get(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.Equal(t, blk.RawData(), got.RawData())
@@ -78,7 +78,7 @@ func TestBlockstore_PutAndGet(t *testing.T) {
 		fakeCID := makeTestBlock(t, []byte("nonexistent")).Cid()
 
 		_, err := db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:blocktest3", tx)
+			bs := db.newReadBlockstore("did:plc:blocktest3", tx)
 			_, err := bs.Get(ctx, fakeCID)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "block not found")
@@ -93,7 +93,7 @@ func TestBlockstore_PutAndGet(t *testing.T) {
 		blk := makeTestBlock(t, []byte("no tx test"))
 
 		_, err := db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:blocktest4", tx)
+			bs := db.newReadBlockstore("did:plc:blocktest4", tx)
 			err := bs.Put(ctx, blk)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "requires a transaction")
@@ -114,7 +114,7 @@ func TestBlockstore_Has(t *testing.T) {
 		blk := makeTestBlock(t, []byte("has test 1"))
 
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:hastest1", tx)
+			bs := db.newWriteBlockstore("did:plc:hastest1", tx)
 
 			err := bs.Put(ctx, blk)
 			require.NoError(t, err)
@@ -134,14 +134,14 @@ func TestBlockstore_Has(t *testing.T) {
 		blk := makeTestBlock(t, []byte("has test 2"))
 
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:hastest2", tx)
+			bs := db.newWriteBlockstore("did:plc:hastest2", tx)
 			return bs.Put(ctx, blk)
 		})
 		require.NoError(t, err)
 
 		// read-only blockstore
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:hastest2", tx)
+			bs := db.newReadBlockstore("did:plc:hastest2", tx)
 			has, err := bs.Has(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.True(t, has)
@@ -156,7 +156,7 @@ func TestBlockstore_Has(t *testing.T) {
 		fakeCID := makeTestBlock(t, []byte("nonexistent has")).Cid()
 
 		_, err := db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:hastest3", tx)
+			bs := db.newReadBlockstore("did:plc:hastest3", tx)
 			has, err := bs.Has(ctx, fakeCID)
 			require.NoError(t, err)
 			require.False(t, has)
@@ -178,7 +178,7 @@ func TestBlockstore_GetSize(t *testing.T) {
 		blk := makeTestBlock(t, data)
 
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:sizetest1", tx)
+			bs := db.newWriteBlockstore("did:plc:sizetest1", tx)
 
 			err := bs.Put(ctx, blk)
 			require.NoError(t, err)
@@ -199,13 +199,13 @@ func TestBlockstore_GetSize(t *testing.T) {
 		blk := makeTestBlock(t, data)
 
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:sizetest2", tx)
+			bs := db.newWriteBlockstore("did:plc:sizetest2", tx)
 			return bs.Put(ctx, blk)
 		})
 		require.NoError(t, err)
 
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:sizetest2", tx)
+			bs := db.newReadBlockstore("did:plc:sizetest2", tx)
 			size, err := bs.GetSize(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.Equal(t, len(data), size)
@@ -228,7 +228,7 @@ func TestBlockstore_PutMany(t *testing.T) {
 		blk3 := makeTestBlock(t, []byte("block 3"))
 
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:putmany1", tx)
+			bs := db.newWriteBlockstore("did:plc:putmany1", tx)
 
 			err := bs.PutMany(ctx, []blocks.Block{blk1, blk2, blk3})
 			require.NoError(t, err)
@@ -252,14 +252,14 @@ func TestBlockstore_PutMany(t *testing.T) {
 		blk2 := makeTestBlock(t, []byte("batch block 2"))
 
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:putmany2", tx)
+			bs := db.newWriteBlockstore("did:plc:putmany2", tx)
 			return bs.PutMany(ctx, []blocks.Block{blk1, blk2})
 		})
 		require.NoError(t, err)
 
 		// verify from read-only blockstore
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:putmany2", tx)
+			bs := db.newReadBlockstore("did:plc:putmany2", tx)
 			for _, blk := range []blocks.Block{blk1, blk2} {
 				got, err := bs.Get(ctx, blk.Cid())
 				require.NoError(t, err)
@@ -276,7 +276,7 @@ func TestBlockstore_PutMany(t *testing.T) {
 		blk := makeTestBlock(t, []byte("no tx putmany"))
 
 		_, err := db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:putmany3", tx)
+			bs := db.newReadBlockstore("did:plc:putmany3", tx)
 			err := bs.PutMany(ctx, []blocks.Block{blk})
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "requires a transaction")
@@ -298,14 +298,14 @@ func TestBlockstore_DeleteBlock(t *testing.T) {
 
 		// first put the block
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:delete1", tx)
+			bs := db.newWriteBlockstore("did:plc:delete1", tx)
 			return bs.Put(ctx, blk)
 		})
 		require.NoError(t, err)
 
 		// verify it exists
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:delete1", tx)
+			bs := db.newReadBlockstore("did:plc:delete1", tx)
 			has, err := bs.Has(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.True(t, has)
@@ -315,14 +315,14 @@ func TestBlockstore_DeleteBlock(t *testing.T) {
 
 		// delete in a new transaction
 		err = db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:delete1", tx)
+			bs := db.newWriteBlockstore("did:plc:delete1", tx)
 			return bs.DeleteBlock(ctx, blk.Cid())
 		})
 		require.NoError(t, err)
 
 		// verify it's gone
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:delete1", tx)
+			bs := db.newReadBlockstore("did:plc:delete1", tx)
 			has, err := bs.Has(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.False(t, has)
@@ -337,7 +337,7 @@ func TestBlockstore_DeleteBlock(t *testing.T) {
 		fakeCID := makeTestBlock(t, []byte("no tx delete")).Cid()
 
 		_, err := db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:delete2", tx)
+			bs := db.newReadBlockstore("did:plc:delete2", tx)
 			err := bs.DeleteBlock(ctx, fakeCID)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "requires a transaction")
@@ -359,20 +359,20 @@ func TestBlockstore_IsolationByDID(t *testing.T) {
 
 		// put block for DID 1
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:isolation1", tx)
+			bs := db.newWriteBlockstore("did:plc:isolation1", tx)
 			return bs.Put(ctx, blk)
 		})
 		require.NoError(t, err)
 
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
 			// DID 1 should have the block
-			bs1 := db.NewReadBlockstore("did:plc:isolation1", tx)
+			bs1 := db.newReadBlockstore("did:plc:isolation1", tx)
 			has, err := bs1.Has(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.True(t, has)
 
 			// DID 2 should NOT have the block
-			bs2 := db.NewReadBlockstore("did:plc:isolation2", tx)
+			bs2 := db.newReadBlockstore("did:plc:isolation2", tx)
 			has, err = bs2.Has(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.False(t, has)
@@ -418,7 +418,7 @@ func TestBlockstore_TransactionRollback(t *testing.T) {
 
 		// put block but return error to roll back
 		err := db.Transact(func(tx fdb.Transaction) error {
-			bs := db.NewWriteBlockstore("did:plc:rollback1", tx)
+			bs := db.newWriteBlockstore("did:plc:rollback1", tx)
 			err := bs.Put(ctx, blk)
 			require.NoError(t, err)
 
@@ -429,7 +429,7 @@ func TestBlockstore_TransactionRollback(t *testing.T) {
 
 		// block should not exist
 		_, err = db.db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
-			bs := db.NewReadBlockstore("did:plc:rollback1", tx)
+			bs := db.newReadBlockstore("did:plc:rollback1", tx)
 			has, err := bs.Has(ctx, blk.Cid())
 			require.NoError(t, err)
 			require.False(t, has)

@@ -43,17 +43,14 @@ func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) error {
 	}
 
 	_, err := transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
-		if err := db.SaveActorTx(tx, actor); err != nil {
-			return nil, err
-		}
-		return nil, nil
+		return nil, db.saveActorTx(tx, actor)
 	})
 
 	return err
 }
 
-// SaveActorTx saves an actor within an existing transaction.
-func (db *DB) SaveActorTx(tx fdb.Transaction, actor *types.Actor) error {
+// saveActorTx saves an actor within an existing transaction
+func (db *DB) saveActorTx(tx fdb.Transaction, actor *types.Actor) error {
 	buf, err := proto.Marshal(actor)
 	if err != nil {
 		return fmt.Errorf("failed to protobuf marshal actor: %w", err)

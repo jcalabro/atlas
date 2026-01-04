@@ -39,7 +39,7 @@ func (s *server) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if _, err := syntax.ParseNSID(collection); err != nil {
-		s.badRequest(w, fmt.Errorf("invalid collection NSID: %w", err))
+		s.badRequest(w, fmt.Errorf("invalid collection nsid: %w", err))
 		return
 	}
 
@@ -176,15 +176,15 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// verify the repo matches the authenticated user
+	// verify user is attempting to write to the repo they own
 	if in.Repo != actor.Did && in.Repo != actor.Handle {
-		s.forbidden(w, fmt.Errorf("repo must match authenticated user"))
+		s.forbidden(w, fmt.Errorf("forbidden"))
 		return
 	}
 
 	// verify the collection is a valid NSID
 	if _, err := syntax.ParseNSID(in.Collection); err != nil {
-		s.badRequest(w, fmt.Errorf("invalid collection NSID: %w", err))
+		s.badRequest(w, fmt.Errorf("invalid collection nsid: %w", err))
 		return
 	}
 
@@ -215,7 +215,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing != nil {
-		s.conflict(w, fmt.Errorf("record already exists"))
+		s.conflict(w, fmt.Errorf("record %q already exists", uri))
 		return
 	}
 
@@ -231,7 +231,6 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		recordData["$type"] = in.Collection
 	}
 
-	// marshal to CBOR
 	cborBytes, err := atdata.MarshalCBOR(recordData)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to marshal record to CBOR: %w", err))
@@ -297,15 +296,15 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// verify the repo matches the authenticated user
+	// verify user is attempting to write to the repo they own
 	if in.Repo != actor.Did && in.Repo != actor.Handle {
-		s.forbidden(w, fmt.Errorf("repo must match authenticated user"))
+		s.forbidden(w, fmt.Errorf("forbidden"))
 		return
 	}
 
 	// verify the collection is a valid NSID
 	if _, err := syntax.ParseNSID(in.Collection); err != nil {
-		s.badRequest(w, fmt.Errorf("invalid collection NSID: %w", err))
+		s.badRequest(w, fmt.Errorf("invalid collection nsid: %w", err))
 		return
 	}
 

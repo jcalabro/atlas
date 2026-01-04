@@ -11,9 +11,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Blockstore implements a per-DID blockstore backed by FoundationDB.
+// blockstore implements a per-DID blockstore backed by FoundationDB.
 // It implements the minimal interface required by indigo's repo package.
-type Blockstore struct {
+type blockstore struct {
 	db     *DB
 	tracer trace.Tracer
 	did    string
@@ -26,9 +26,9 @@ type Blockstore struct {
 	writeTx *fdb.Transaction
 }
 
-// NewReadBlockstore creates a read-only blockstore bound to an FDB read transaction.
-func (db *DB) NewReadBlockstore(did string, tx fdb.ReadTransaction) *Blockstore {
-	return &Blockstore{
+// newReadBlockstore creates a read-only blockstore bound to an FDB read transaction.
+func (db *DB) newReadBlockstore(did string, tx fdb.ReadTransaction) *blockstore {
+	return &blockstore{
 		db:     db,
 		tracer: db.tracer,
 		did:    did,
@@ -36,10 +36,10 @@ func (db *DB) NewReadBlockstore(did string, tx fdb.ReadTransaction) *Blockstore 
 	}
 }
 
-// NewWriteBlockstore creates a blockstore bound to an FDB write transaction.
+// newWriteBlockstore creates a blockstore bound to an FDB write transaction.
 // All reads and writes will happen within this transaction.
-func (db *DB) NewWriteBlockstore(did string, tx fdb.Transaction) *Blockstore {
-	return &Blockstore{
+func (db *DB) newWriteBlockstore(did string, tx fdb.Transaction) *blockstore {
+	return &blockstore{
 		db:      db,
 		tracer:  db.tracer,
 		did:     did,
@@ -48,7 +48,7 @@ func (db *DB) NewWriteBlockstore(did string, tx fdb.Transaction) *Blockstore {
 }
 
 // Get retrieves a block by its CID.
-func (bs *Blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) {
+func (bs *blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) {
 	_, span := bs.tracer.Start(ctx, "Blockstore.Get")
 	defer span.End()
 
@@ -80,7 +80,7 @@ func (bs *Blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) 
 }
 
 // Has returns whether the blockstore contains a block with the given CID.
-func (bs *Blockstore) Has(ctx context.Context, c cid.Cid) (bool, error) {
+func (bs *blockstore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 	_, span := bs.tracer.Start(ctx, "Blockstore.Has")
 	defer span.End()
 
@@ -109,7 +109,7 @@ func (bs *Blockstore) Has(ctx context.Context, c cid.Cid) (bool, error) {
 }
 
 // GetSize returns the size of a block.
-func (bs *Blockstore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
+func (bs *blockstore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 	blk, err := bs.Get(ctx, c)
 	if err != nil {
 		return 0, err
@@ -119,7 +119,7 @@ func (bs *Blockstore) GetSize(ctx context.Context, c cid.Cid) (int, error) {
 
 // Put stores a block. In transactional mode, writes directly to FDB.
 // In read-only mode, this method will panic as writes require a transaction.
-func (bs *Blockstore) Put(ctx context.Context, blk blocks.Block) error {
+func (bs *blockstore) Put(ctx context.Context, blk blocks.Block) error {
 	_, span := bs.tracer.Start(ctx, "Blockstore.Put")
 	defer span.End()
 
@@ -139,7 +139,7 @@ func (bs *Blockstore) Put(ctx context.Context, blk blocks.Block) error {
 }
 
 // PutMany stores multiple blocks. Requires transactional mode.
-func (bs *Blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
+func (bs *blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 	_, span := bs.tracer.Start(ctx, "Blockstore.PutMany")
 	defer span.End()
 
@@ -161,7 +161,7 @@ func (bs *Blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 }
 
 // DeleteBlock removes a block from the store. Requires transactional mode.
-func (bs *Blockstore) DeleteBlock(ctx context.Context, c cid.Cid) error {
+func (bs *blockstore) DeleteBlock(ctx context.Context, c cid.Cid) error {
 	_, span := bs.tracer.Start(ctx, "Blockstore.DeleteBlock")
 	defer span.End()
 
@@ -179,9 +179,9 @@ func (bs *Blockstore) DeleteBlock(ctx context.Context, c cid.Cid) error {
 	return nil
 }
 
-func (bs *Blockstore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error) {
+func (bs *blockstore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error) {
 	return nil, fmt.Errorf("AllKeysChan not implemented")
 }
 
 // HashOnRead is a no-op
-func (bs *Blockstore) HashOnRead(enabled bool) {}
+func (bs *blockstore) HashOnRead(enabled bool) {}
