@@ -139,8 +139,8 @@ func (s *server) hostMiddleware(next http.Handler) http.Handler {
 			header = header[:idx]
 		}
 
-		host, ok := s.hosts[header]
-		if !ok {
+		host := s.getHost(header)
+		if host == nil {
 			s.notFound(w, fmt.Errorf("host %q not found", header))
 			return
 		}

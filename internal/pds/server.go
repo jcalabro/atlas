@@ -48,7 +48,9 @@ type server struct {
 	log    *slog.Logger
 	tracer trace.Tracer
 
-	hosts map[string]*loadedHostConfig
+	hostsMu    sync.RWMutex
+	hosts      map[string]*loadedHostConfig
+	configFile string
 
 	db *db.DB
 
@@ -62,6 +64,28 @@ func (s *server) shutdown(cancel context.CancelFunc) {
 		s.log.Info("shutdown initiated")
 		cancel()
 	})
+}
+
+func (s *server) reloadConfig() {
+	s.log.Info("reloading configuration", "file", s.configFile)
+
+	hosts, err := LoadConfig(s.configFile)
+	if err != nil {
+		s.log.Error("failed to reload config", "err", err)
+		return
+	}
+
+	s.hostsMu.Lock()
+	s.hosts = hosts
+	s.hostsMu.Unlock()
+
+	s.log.Info("configuration reloaded successfully", "num_hosts", len(hosts))
+}
+
+func (s *server) getHost(hostname string) *loadedHostConfig {
+	s.hostsMu.RLock()
+	defer s.hostsMu.RUnlock()
+	return s.hosts[hostname]
 }
 
 func Run(ctx context.Context, args *Args) error {
@@ -103,7 +127,8 @@ func Run(ctx context.Context, args *Args) error {
 		log:    log,
 		tracer: tracer,
 
-		hosts: hosts,
+		hosts:      hosts,
+		configFile: args.ConfigFile,
 
 		db: db,
 
@@ -126,14 +151,22 @@ func Run(ctx context.Context, args *Args) error {
 	errs, ctx := errgroup.WithContext(ctx)
 
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
 	go func() {
-		select {
-		case <-ctx.Done():
-		case <-sig:
-			s.log.Info("received shutdown signal")
-			s.shutdown(cancel)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case received := <-sig:
+				if received == syscall.SIGHUP {
+					s.reloadConfig()
+				} else {
+					s.log.Info("received shutdown signal")
+					s.shutdown(cancel)
+					return
+				}
+			}
 		}
 	}()
 
