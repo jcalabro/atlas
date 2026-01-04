@@ -2,6 +2,7 @@ package foundation
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
@@ -110,4 +111,70 @@ func (db *DB) GetRecord(ctx context.Context, uri string) (*types.Record, error) 
 func (db *DB) DeleteRecordTx(tx fdb.Transaction, uri *at.URI) {
 	key := packURI(db.records.records, uri)
 	tx.Clear(key)
+}
+
+// incrementCollectionCountTx atomically increments the collection count for a (did, collection) pair.
+func (db *DB) incrementCollectionCountTx(tx fdb.Transaction, did, collection string) {
+	key := pack(db.records.collectionCounts, did, collection)
+	one := make([]byte, 8)
+	binary.BigEndian.PutUint64(one, 1)
+	tx.Add(key, one)
+}
+
+// decrementCollectionCountTx atomically decrements the collection count for a (did, collection) pair.
+func (db *DB) decrementCollectionCountTx(tx fdb.Transaction, did, collection string) {
+	key := pack(db.records.collectionCounts, did, collection)
+	// -1 as uint64 in big-endian (two's complement)
+	minusOne := make([]byte, 8)
+	binary.BigEndian.PutUint64(minusOne, ^uint64(0))
+	tx.Add(key, minusOne)
+}
+
+// GetCollections returns the list of distinct collection NSIDs for a DID.
+// It reads from the collection counts secondary index for efficiency.
+func (db *DB) GetCollections(ctx context.Context, did string) ([]string, error) {
+	_, span := db.tracer.Start(ctx, "GetCollections")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("did", did))
+
+	return readTransaction(db.db, func(tx fdb.ReadTransaction) ([]string, error) {
+		// range scan over the collection counts index for this DID
+		rangeBegin := pack(db.records.collectionCounts, did)
+		rangeEnd := pack(db.records.collectionCounts, did+"\xff")
+		kr := fdb.KeyRange{Begin: rangeBegin, End: rangeEnd}
+
+		var collections []string
+		iter := tx.GetRange(kr, fdb.RangeOptions{}).Iterator()
+		for iter.Advance() {
+			kv, err := iter.Get()
+			if err != nil {
+				return nil, fmt.Errorf("failed to iterate collection counts: %w", err)
+			}
+
+			// extract collection from the key tuple (did, collection)
+			tup, err := db.records.collectionCounts.Unpack(kv.Key)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unpack collection count key: %w", err)
+			}
+			if len(tup) < 2 {
+				continue
+			}
+
+			collection, ok := tup[1].(string)
+			if !ok {
+				continue
+			}
+
+			// only include collections with count > 0
+			if len(kv.Value) == 8 {
+				count := int64(binary.BigEndian.Uint64(kv.Value))
+				if count > 0 {
+					collections = append(collections, collection)
+				}
+			}
+		}
+
+		return collections, nil
+	})
 }

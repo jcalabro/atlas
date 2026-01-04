@@ -52,6 +52,10 @@ type actors struct {
 type records struct {
 	// Primary index. Records are keyed by (did, collection, rkey)
 	records directory.DirectorySubspace
+
+	// Secondary index. Tracks count of records per collection per DID.
+	// Key: (did, collection), Value: int64 count (little-endian)
+	collectionCounts directory.DirectorySubspace
 }
 
 type blockDir struct {
@@ -118,6 +122,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	db.records.records, err = directory.CreateOrOpen(db.db, []string{"records"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create records directory: %w", err)
+	}
+
+	db.records.collectionCounts, err = directory.CreateOrOpen(db.db, []string{"collection_counts"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create collection_counts directory: %w", err)
 	}
 
 	db.blockDir.blocks, err = directory.CreateOrOpen(db.db, []string{"blocks"}, nil)

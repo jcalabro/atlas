@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/bluesky-social/indigo/api/atproto"
+	"github.com/bluesky-social/indigo/atproto/identity"
+	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1084,5 +1086,214 @@ func TestConcurrentModificationDetection(t *testing.T) {
 
 		// should succeed
 		require.Equal(t, http.StatusOK, w2.Code)
+	})
+}
+
+func TestHandleDescribeRepo(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	router := srv.router()
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	dir, ok := srv.directory.(*identity.MockDirectory)
+	require.True(t, ok, "directory must be a MockDirectory")
+
+	t.Run("success - by DID", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:describerepo1", "describerepo1@example.com", "describerepo1.dev.atlaspds.dev")
+
+		// add to mock directory
+		handle, err := syntax.ParseHandle(actor.Handle)
+		require.NoError(t, err)
+		did, err := syntax.ParseDID(actor.Did)
+		require.NoError(t, err)
+		dir.Insert(identity.Identity{
+			DID:         did,
+			Handle:      handle,
+			AlsoKnownAs: []string{"at://" + actor.Handle},
+		})
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.describeRepo?repo=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var out atproto.RepoDescribeRepo_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, out.Did)
+		require.Equal(t, actor.Handle, out.Handle)
+		require.True(t, out.HandleIsCorrect)
+		require.NotNil(t, out.DidDoc)
+		require.NotNil(t, out.Collections)
+		require.Empty(t, out.Collections) // no records yet
+	})
+
+	t.Run("success - by handle", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:describerepo2", "describerepo2@example.com", "describerepo2.dev.atlaspds.dev")
+
+		// add to mock directory
+		handle, err := syntax.ParseHandle(actor.Handle)
+		require.NoError(t, err)
+		did, err := syntax.ParseDID(actor.Did)
+		require.NoError(t, err)
+		dir.Insert(identity.Identity{
+			DID:         did,
+			Handle:      handle,
+			AlsoKnownAs: []string{"at://" + actor.Handle},
+		})
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.describeRepo?repo=%s", actor.Handle)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out atproto.RepoDescribeRepo_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, out.Did)
+		require.Equal(t, actor.Handle, out.Handle)
+		require.True(t, out.HandleIsCorrect)
+	})
+
+	t.Run("success - with collections", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:describerepo3", "describerepo3@example.com", "describerepo3.dev.atlaspds.dev")
+
+		// add to mock directory
+		handle, err := syntax.ParseHandle(actor.Handle)
+		require.NoError(t, err)
+		did, err := syntax.ParseDID(actor.Did)
+		require.NoError(t, err)
+		dir.Insert(identity.Identity{
+			DID:         did,
+			Handle:      handle,
+			AlsoKnownAs: []string{"at://" + actor.Handle},
+		})
+
+		// create records in different collections
+		collections := []string{"app.bsky.feed.post", "app.bsky.actor.profile", "app.bsky.feed.like"}
+		for _, collection := range collections {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": collection,
+				"rkey":       tid.String(),
+				"record": map[string]any{
+					"$type":     collection,
+					"createdAt": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			// reload actor for each request
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+		}
+
+		// now describe the repo
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.describeRepo?repo=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out atproto.RepoDescribeRepo_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, out.Did)
+		require.Len(t, out.Collections, 3)
+
+		// verify all collections are present (order may vary)
+		collectionSet := make(map[string]bool)
+		for _, c := range out.Collections {
+			collectionSet[c] = true
+		}
+		for _, expected := range collections {
+			require.True(t, collectionSet[expected], "expected collection %s to be present", expected)
+		}
+	})
+
+	t.Run("success - handle invalid", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:describerepo4", "describerepo4@example.com", "describerepo4.dev.atlaspds.dev")
+
+		// add to mock directory with invalid handle (bi-directional verification failed)
+		did, err := syntax.ParseDID(actor.Did)
+		require.NoError(t, err)
+		dir.Insert(identity.Identity{
+			DID:         did,
+			Handle:      syntax.HandleInvalid,
+			AlsoKnownAs: []string{"at://" + actor.Handle},
+		})
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.describeRepo?repo=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out atproto.RepoDescribeRepo_Output
+		err = json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Did, out.Did)
+		require.Equal(t, "handle.invalid", out.Handle)
+		require.False(t, out.HandleIsCorrect)
+	})
+
+	t.Run("error - missing repo parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.describeRepo", nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid repo format", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.describeRepo?repo=not-valid!", nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - repo not found", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.describeRepo?repo=did:plc:nonexistent", nil)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 }

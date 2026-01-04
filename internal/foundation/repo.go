@@ -219,6 +219,9 @@ func (db *DB) CreateRecord(
 			return nil, fmt.Errorf("failed to save record: %w", err)
 		}
 
+		// update collection count index
+		db.incrementCollectionCountTx(tx, actor.Did, record.Collection)
+
 		// update actor with new head and rev
 		actor.Head = commitCID.String()
 		actor.Rev = newCommit.Rev
@@ -334,6 +337,9 @@ func (db *DB) DeleteRecord(
 
 		// delete record from secondary index
 		db.DeleteRecordTx(tx, uri)
+
+		// update collection count index
+		db.decrementCollectionCountTx(tx, actor.Did, uri.Collection)
 
 		// update actor with new head and rev
 		actor.Head = commitCID.String()

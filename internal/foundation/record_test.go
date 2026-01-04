@@ -1,6 +1,7 @@
 package foundation
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -230,4 +231,138 @@ func TestSaveRecord_MultipleCollections(t *testing.T) {
 		require.NotNil(t, retrieved)
 		require.Equal(t, collection, retrieved.Collection)
 	}
+}
+
+func TestGetCollections_Empty(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	db := testDB(t)
+
+	collections, err := db.GetCollections(ctx, "did:plc:nonexistent")
+	require.NoError(t, err)
+	require.Empty(t, collections)
+}
+
+func TestCollectionCounters(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	db := testDB(t)
+
+	// use timestamp to ensure unique DIDs across test runs
+	ts := time.Now().UnixNano()
+
+	t.Run("increment creates collection", func(t *testing.T) {
+		did := fmt.Sprintf("did:plc:colcount_inc_%d", ts)
+
+		// increment counter for a collection
+		err := db.Transact(func(tx fdb.Transaction) error {
+			db.incrementCollectionCountTx(tx, did, "app.bsky.feed.post")
+			return nil
+		})
+		require.NoError(t, err)
+
+		// verify collection appears
+		collections, err := db.GetCollections(ctx, did)
+		require.NoError(t, err)
+		require.Contains(t, collections, "app.bsky.feed.post")
+	})
+
+	t.Run("multiple increments same collection", func(t *testing.T) {
+		did := fmt.Sprintf("did:plc:colcount_multi_%d", ts)
+
+		// increment same collection multiple times
+		for range 3 {
+			err := db.Transact(func(tx fdb.Transaction) error {
+				db.incrementCollectionCountTx(tx, did, "app.bsky.feed.like")
+				return nil
+			})
+			require.NoError(t, err)
+		}
+
+		// verify collection appears only once
+		collections, err := db.GetCollections(ctx, did)
+		require.NoError(t, err)
+		require.Len(t, collections, 1)
+		require.Contains(t, collections, "app.bsky.feed.like")
+	})
+
+	t.Run("decrement to zero hides collection", func(t *testing.T) {
+		did := fmt.Sprintf("did:plc:colcount_dec_%d", ts)
+
+		// create a new collection with count 1
+		err := db.Transact(func(tx fdb.Transaction) error {
+			db.incrementCollectionCountTx(tx, did, "app.bsky.graph.follow")
+			return nil
+		})
+		require.NoError(t, err)
+
+		// verify it exists
+		collections, err := db.GetCollections(ctx, did)
+		require.NoError(t, err)
+		require.Contains(t, collections, "app.bsky.graph.follow")
+
+		// decrement to zero
+		err = db.Transact(func(tx fdb.Transaction) error {
+			db.decrementCollectionCountTx(tx, did, "app.bsky.graph.follow")
+			return nil
+		})
+		require.NoError(t, err)
+
+		// verify it's no longer returned
+		collections, err = db.GetCollections(ctx, did)
+		require.NoError(t, err)
+		require.NotContains(t, collections, "app.bsky.graph.follow")
+	})
+
+	t.Run("multiple collections for same did", func(t *testing.T) {
+		did := fmt.Sprintf("did:plc:colcount_manycol_%d", ts)
+		testCollections := []string{
+			"app.bsky.feed.post",
+			"app.bsky.feed.like",
+			"app.bsky.feed.repost",
+		}
+
+		// add multiple collections
+		for _, collection := range testCollections {
+			err := db.Transact(func(tx fdb.Transaction) error {
+				db.incrementCollectionCountTx(tx, did, collection)
+				return nil
+			})
+			require.NoError(t, err)
+		}
+
+		// verify all collections are returned
+		collections, err := db.GetCollections(ctx, did)
+		require.NoError(t, err)
+		require.Len(t, collections, 3)
+
+		for _, expected := range testCollections {
+			require.Contains(t, collections, expected)
+		}
+	})
+
+	t.Run("collections are isolated per did", func(t *testing.T) {
+		did1 := fmt.Sprintf("did:plc:colcount_iso1_%d", ts)
+		did2 := fmt.Sprintf("did:plc:colcount_iso2_%d", ts)
+
+		// add different collections to different dids
+		err := db.Transact(func(tx fdb.Transaction) error {
+			db.incrementCollectionCountTx(tx, did1, "app.bsky.feed.post")
+			db.incrementCollectionCountTx(tx, did2, "app.bsky.graph.block")
+			return nil
+		})
+		require.NoError(t, err)
+
+		// verify did1 only has its collection
+		collections1, err := db.GetCollections(ctx, did1)
+		require.NoError(t, err)
+		require.Contains(t, collections1, "app.bsky.feed.post")
+		require.NotContains(t, collections1, "app.bsky.graph.block")
+
+		// verify did2 only has its collection
+		collections2, err := db.GetCollections(ctx, did2)
+		require.NoError(t, err)
+		require.Contains(t, collections2, "app.bsky.graph.block")
+		require.NotContains(t, collections2, "app.bsky.feed.post")
+	})
 }

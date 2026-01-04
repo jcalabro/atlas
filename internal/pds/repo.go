@@ -8,11 +8,13 @@ import (
 
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/atdata"
+	"github.com/bluesky-social/indigo/atproto/identity"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/jcalabro/atlas/internal/at"
 	"github.com/jcalabro/atlas/internal/foundation"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -355,5 +357,64 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 
 	s.jsonOK(w, &atproto.RepoDeleteRecord_Output{
 		Commit: &atproto.RepoDefs_CommitMeta{Cid: result.CommitCID.String(), Rev: result.Rev},
+	})
+}
+
+func (s *server) handleDescribeRepo(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	span := spanFromContext(ctx)
+	defer span.End()
+
+	repo := r.URL.Query().Get("repo")
+	span.SetAttributes(attribute.String("repo", repo))
+
+	if repo == "" {
+		s.badRequest(w, fmt.Errorf("repo is required"))
+		return
+	}
+
+	// parse as either DID or handle
+	atid, err := syntax.ParseAtIdentifier(repo)
+	if err != nil {
+		s.badRequest(w, fmt.Errorf("invalid repo identifier: %w", err))
+		return
+	}
+
+	// look up the identity (does bi-directional handle verification)
+	ident, err := s.directory.Lookup(ctx, *atid)
+	if errors.Is(err, identity.ErrDIDNotFound) || errors.Is(err, identity.ErrHandleNotFound) {
+		s.notFound(w, fmt.Errorf("repo not found"))
+		return
+	}
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to lookup identity: %w", err))
+		return
+	}
+
+	// check if handle resolves correctly
+	// if the handle is "handle.invalid", it means bi-directional verification failed
+	handleIsCorrect := ident.Handle != syntax.HandleInvalid
+
+	// get collections from the database
+	collections, err := s.db.GetCollections(ctx, ident.DID.String())
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get collections: %w", err))
+		return
+	}
+
+	// ensure collections is never nil (spec says it's a list)
+	if collections == nil {
+		collections = []string{}
+	}
+
+	// build the DID document from the identity
+	didDoc := ident.DIDDocument()
+
+	s.jsonOK(w, &atproto.RepoDescribeRepo_Output{
+		Did:             ident.DID.String(),
+		Handle:          ident.Handle.String(),
+		DidDoc:          didDoc,
+		Collections:     collections,
+		HandleIsCorrect: handleIsCorrect,
 	})
 }
