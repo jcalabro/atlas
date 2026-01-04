@@ -148,7 +148,7 @@ func signOp(rotationKey atcrypto.PrivateKey, op *Operation) error {
 }
 
 func (c *Client) SendOperation(ctx context.Context, did string, op *Operation) error {
-	_, span := c.tracer.Start(ctx, "plc/SendOperation")
+	ctx, span := c.tracer.Start(ctx, "plc/SendOperation")
 	defer span.End()
 
 	body, err := json.Marshal(op)

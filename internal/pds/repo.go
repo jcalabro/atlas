@@ -163,8 +163,6 @@ type createRecordInput struct {
 
 func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	span := spanFromContext(ctx)
-	defer span.End()
 
 	actor := actorFromContext(ctx)
 	if actor == nil {
