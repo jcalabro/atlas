@@ -16,6 +16,140 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestHandleGetLatestCommit(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	router := srv.router()
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	t.Run("success - returns latest commit for repo", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:latestcommit1", "latestcommit1@example.com", "latestcommit1.dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getLatestCommit?did=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var out struct {
+			Cid string `json:"cid"`
+			Rev string `json:"rev"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Equal(t, actor.Head, out.Cid)
+		require.Equal(t, actor.Rev, out.Rev)
+		require.NotEmpty(t, out.Cid)
+		require.NotEmpty(t, out.Rev)
+	})
+
+	t.Run("success - commit updates after creating record", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:latestcommit2", "latestcommit2@example.com", "latestcommit2.dev.atlaspds.dev")
+		initialHead := actor.Head
+		initialRev := actor.Rev
+
+		// get latest commit before creating record
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getLatestCommit?did=%s", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var beforeOut struct {
+			Cid string `json:"cid"`
+			Rev string `json:"rev"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &beforeOut)
+		require.NoError(t, err)
+		require.Equal(t, initialHead, beforeOut.Cid)
+		require.Equal(t, initialRev, beforeOut.Rev)
+
+		// create a record
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       tid.String(),
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Test post for getLatestCommit",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// get latest commit after creating record
+		w = httptest.NewRecorder()
+		req = httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var afterOut struct {
+			Cid string `json:"cid"`
+			Rev string `json:"rev"`
+		}
+		err = json.Unmarshal(w.Body.Bytes(), &afterOut)
+		require.NoError(t, err)
+
+		// head and rev should have changed
+		require.NotEqual(t, initialHead, afterOut.Cid, "head should change after creating record")
+		require.NotEqual(t, initialRev, afterOut.Rev, "rev should change after creating record")
+	})
+
+	t.Run("error - missing did parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getLatestCommit", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid did format", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getLatestCommit?did=not-a-did", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - repo not found", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getLatestCommit?did=did:plc:nonexistent", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
 func TestHandleGetBlocks(t *testing.T) {
 	t.Parallel()
 	srv := testServer(t)

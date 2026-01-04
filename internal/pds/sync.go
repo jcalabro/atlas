@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/ipfs/go-cid"
 	cbor "github.com/ipfs/go-ipld-cbor"
@@ -102,4 +103,37 @@ func (s *server) handleGetBlocks(w http.ResponseWriter, r *http.Request) {
 	if _, err := buf.WriteTo(w); err != nil {
 		s.log.Error("failed to write car response", "err", err)
 	}
+}
+
+func (s *server) handleGetLatestCommit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	span := spanFromContext(ctx)
+	defer span.End()
+
+	did := r.URL.Query().Get("did")
+	if did == "" {
+		s.badRequest(w, fmt.Errorf("did is required"))
+		return
+	}
+
+	// validate DID
+	if _, err := syntax.ParseDID(did); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid did: %w", err))
+		return
+	}
+
+	actor, err := s.db.GetActorByDID(ctx, did)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get actor: %w", err))
+		return
+	}
+	if actor == nil {
+		s.notFound(w, fmt.Errorf("repo not found"))
+		return
+	}
+
+	s.jsonOK(w, &atproto.SyncGetLatestCommit_Output{
+		Cid: actor.Head,
+		Rev: actor.Rev,
+	})
 }
