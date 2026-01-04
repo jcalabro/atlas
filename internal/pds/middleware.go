@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jcalabro/atlas/internal/env"
+	"github.com/jcalabro/atlas/internal/pds/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -111,8 +112,8 @@ func (s *server) observabilityMiddleware(next http.Handler) http.Handler {
 		}
 
 		status := strconv.Itoa(rw.status)
-		requests.WithLabelValues(env.Version, serviceName, r.Host, r.URL.Path, r.Method, status).Inc()
-		requestDuration.WithLabelValues(serviceName, r.Host, r.URL.Path, r.Method, status).Observe(duration)
+		metrics.Requests.WithLabelValues(env.Version, serviceName, r.Host, r.URL.Path, r.Method, status).Inc()
+		metrics.RequestDuration.WithLabelValues(serviceName, r.Host, r.URL.Path, r.Method, status).Observe(duration)
 
 		s.log.Debug("request completed",
 			slog.String("host", r.Host),

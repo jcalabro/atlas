@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
@@ -29,7 +30,10 @@ var cidBuilder = cid.NewPrefixV1(cid.DagCBOR, multihash.SHA2_256)
 
 // InitRepo creates an empty repository for a new account.
 // Returns the initial root CID and revision.
-func (db *DB) InitRepo(ctx context.Context, actor *types.Actor) (cid.Cid, string, error) {
+func (db *DB) InitRepo(ctx context.Context, actor *types.Actor) (_ cid.Cid, _ string, err error) {
+	start := time.Now()
+	defer func() { observeOperation("InitRepo", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "InitRepo")
 	defer span.End()
 
@@ -109,7 +113,10 @@ func (db *DB) CreateRecord(
 	record *types.Record,
 	cborBytes []byte,
 	swapCommit *string,
-) (*CreateRecordResult, error) {
+) (_ *CreateRecordResult, err error) {
+	start := time.Now()
+	defer func() { observeOperation("CreateRecord", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "CreateRecord")
 	defer span.End()
 
@@ -127,17 +134,17 @@ func (db *DB) CreateRecord(
 	return transaction(db.db, func(tx fdb.Transaction) (*CreateRecordResult, error) {
 		// check swapCommit - verify the current head hasn't been changed by
 		// another process/thread attempting to write concurrently
-		currentHead, err := db.GetActorHeadTx(tx, actor.Did)
+		existing, err := db.getActorByDIDTx(tx, actor.Did)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current head: %w", err)
 		}
 
-		if swapCommit != nil && currentHead != *swapCommit {
+		if swapCommit != nil && existing.Head != *swapCommit {
 			return nil, ErrConcurrentModification
 		}
 
 		// verify head hasn't changed since we loaded the actor
-		if currentHead != actor.Head {
+		if existing.Head != actor.Head {
 			return nil, ErrConcurrentModification
 		}
 
@@ -251,7 +258,10 @@ func (db *DB) DeleteRecord(
 	actor *types.Actor,
 	uri *at.URI,
 	swapCommit *string,
-) (*DeleteRecordResult, error) {
+) (_ *DeleteRecordResult, err error) {
+	start := time.Now()
+	defer func() { observeOperation("DeleteRecord", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "DeleteRecord")
 	defer span.End()
 
@@ -264,17 +274,17 @@ func (db *DB) DeleteRecord(
 
 	return transaction(db.db, func(tx fdb.Transaction) (*DeleteRecordResult, error) {
 		// check swapCommit - verify the current head hasn't changed
-		currentHead, err := db.GetActorHeadTx(tx, actor.Did)
+		existing, err := db.getActorByDIDTx(tx, actor.Did)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get current head: %w", err)
 		}
 
-		if swapCommit != nil && currentHead != *swapCommit {
+		if swapCommit != nil && existing.Head != *swapCommit {
 			return nil, ErrConcurrentModification
 		}
 
 		// verify head hasn't changed since we loaded the actor
-		if currentHead != actor.Head {
+		if existing.Head != actor.Head {
 			return nil, ErrConcurrentModification
 		}
 

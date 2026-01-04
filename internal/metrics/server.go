@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	StatusOK    = "ok"
-	StatusError = "error"
+	StatusOK       = "ok"
+	StatusError    = "error"
+	StatusNotFound = "not_found"
 )
 
 func RunServer(ctx context.Context, cancel context.CancelFunc, addr string) {

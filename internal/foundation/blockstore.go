@@ -3,6 +3,7 @@ package foundation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	blocks "github.com/ipfs/go-block-format"
@@ -214,7 +215,7 @@ func (bs *blockstore) HashOnRead(enabled bool) {}
 
 // GetBlocks retrieves multiple blocks by their CIDs for a given DID.
 // Returns the blocks that were found. Missing blocks are silently skipped.
-func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) ([]blocks.Block, error) {
+func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) (_ []blocks.Block, err error) {
 	_, span := db.tracer.Start(ctx, "GetBlocks")
 	defer span.End()
 
@@ -236,7 +237,10 @@ func (db *DB) GetBlocks(ctx context.Context, did string, cids []cid.Cid) ([]bloc
 }
 
 // GetAllBlocks retrieves all blocks for a given DID.
-func (db *DB) GetAllBlocks(ctx context.Context, did string) ([]blocks.Block, error) {
+func (db *DB) GetAllBlocks(ctx context.Context, did string) (_ []blocks.Block, err error) {
+	start := time.Now()
+	defer func() { observeOperation("GetAllBlocks", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "GetAllBlocks")
 	defer span.End()
 
@@ -290,7 +294,10 @@ func (db *DB) GetAllBlocks(ctx context.Context, did string) ([]blocks.Block, err
 
 // GetBlocksSince retrieves all blocks added after the given revision.
 // Used for incremental sync via the `since` parameter.
-func (db *DB) GetBlocksSince(ctx context.Context, did string, sinceRev string) ([]blocks.Block, error) {
+func (db *DB) GetBlocksSince(ctx context.Context, did string, sinceRev string) (_ []blocks.Block, err error) {
+	start := time.Now()
+	defer func() { observeOperation("GetBlocksSince", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "GetBlocksSince")
 	defer span.End()
 

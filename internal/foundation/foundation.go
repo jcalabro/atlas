@@ -2,14 +2,22 @@ package foundation
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/apple/foundationdb/bindings/go/src/fdb/directory"
 	"github.com/apple/foundationdb/bindings/go/src/fdb/tuple"
+	"github.com/jcalabro/atlas/internal/metrics"
+	pdsmetrics "github.com/jcalabro/atlas/internal/pds/metrics"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
 )
+
+// ErrNotFound is returned when a requested item does not exist in the database
+var ErrNotFound = errors.New("not found")
 
 // Options for configuring the FDB client
 type Config struct {
@@ -173,6 +181,7 @@ func transaction[T any](db *fdb.Database, fn func(tx fdb.Transaction) (T, error)
 	resI, err := db.Transact(func(tx fdb.Transaction) (any, error) {
 		return fn(tx)
 	})
+
 	if err != nil {
 		return t, err
 	}
@@ -197,13 +206,13 @@ func readTransaction[T any](db *fdb.Database, fn func(tx fdb.ReadTransaction) (T
 	resI, err := db.ReadTransact(func(tx fdb.ReadTransaction) (any, error) {
 		return fn(tx)
 	})
+
 	if err != nil {
 		return t, err
 	}
 
-	// handle nil result
 	if resI == nil {
-		return t, nil
+		return t, ErrNotFound
 	}
 
 	res, ok := resI.(T)
@@ -215,21 +224,42 @@ func readTransaction[T any](db *fdb.Database, fn func(tx fdb.ReadTransaction) (T
 }
 
 // Executes the given anonymous function as a read transaction, then attempts to protobuf unmarshal
-// the resulting `[]byte` in to the given `item`. Returns `false` if the item does not exist in the db.
-func readProto(db *fdb.Database, item proto.Message, fn func(fdb.ReadTransaction) ([]byte, error)) (bool, error) {
+// the resulting `[]byte` in to the given `item`. Returns `ErrNotFound` if the item does not exist in the db.
+func readProto(db *fdb.Database, item proto.Message, fn func(fdb.ReadTransaction) ([]byte, error)) error {
 	buf, err := readTransaction(db, fn)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if len(buf) == 0 {
-		return false, nil // not found
+		return ErrNotFound
 	}
 
-	if err := proto.Unmarshal(buf, item); err != nil {
-		return false, err
-	}
+	return proto.Unmarshal(buf, item)
+}
 
-	return true, nil
+// Records prometheus metrics and OTEL span status for foundation queries
+func (db *DB) observe(ctx context.Context, name string) (context.Context, trace.Span, func(error)) {
+	ctx, span := db.tracer.Start(ctx, name)
+	defer span.End()
+
+	start := time.Now()
+	return ctx, span, func(err error) {
+		var status string
+		switch {
+		case err == nil:
+			status = metrics.StatusOK
+			span.SetStatus(codes.Ok)
+		case errors.Is(err, ErrNotFound):
+			status = metrics.StatusNotFound
+			span.SetStatus(codes.Ok) // not found is a successful query
+		default:
+			status = metrics.StatusError
+			span.RecordError(err)
+		}
+
+		pdsmetrics.Queries.WithLabelValues(name, status).Inc()
+		pdsmetrics.QueryDuration.WithLabelValues(name, status).Observe(time.Since(start).Seconds())
+	}
 }
 
 func pack(dir directory.DirectorySubspace, keys ...tuple.TupleElement) fdb.Key {

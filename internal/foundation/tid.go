@@ -17,7 +17,10 @@ import (
 // low 10 bits reserved for clock ID (set to 0). If the timestamp-based TID
 // would not be greater than the last generated TID for this repo, we
 // increment from the last value instead to maintain monotonicity.
-func (db *DB) NextTID(ctx context.Context, did string) (syntax.TID, error) {
+func (db *DB) NextTID(ctx context.Context, did string) (_ syntax.TID, err error) {
+	start := time.Now()
+	defer func() { observeOperation("NextTID", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "NextTID")
 	defer span.End()
 

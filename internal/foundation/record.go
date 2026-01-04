@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/apple/foundationdb/bindings/go/src/fdb/directory"
@@ -41,7 +42,10 @@ func ValidateRecord(r *types.Record) error {
 }
 
 // SaveRecord stores a record in the database
-func (db *DB) SaveRecord(ctx context.Context, record *types.Record) error {
+func (db *DB) SaveRecord(ctx context.Context, record *types.Record) (err error) {
+	start := time.Now()
+	defer func() { observeOperation("SaveRecord", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "SaveRecord")
 	defer span.End()
 
@@ -56,7 +60,7 @@ func (db *DB) SaveRecord(ctx context.Context, record *types.Record) error {
 		return fmt.Errorf("invalid record: %w", err)
 	}
 
-	_, err := transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
+	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
 		return nil, db.saveRecordTx(tx, record)
 	})
 
@@ -80,7 +84,10 @@ func (db *DB) saveRecordTx(tx fdb.Transaction, record *types.Record) error {
 }
 
 // GetRecord retrieves a record by its AT URI
-func (db *DB) GetRecord(ctx context.Context, uri string) (*types.Record, error) {
+func (db *DB) GetRecord(ctx context.Context, uri string) (_ *types.Record, err error) {
+	start := time.Now()
+	defer func() { observeOperation("GetRecord", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "GetRecord")
 	defer span.End()
 
@@ -132,7 +139,10 @@ func (db *DB) decrementCollectionCountTx(tx fdb.Transaction, did, collection str
 
 // GetCollections returns the list of distinct collection NSIDs for a DID.
 // It reads from the collection counts secondary index for efficiency.
-func (db *DB) GetCollections(ctx context.Context, did string) ([]string, error) {
+func (db *DB) GetCollections(ctx context.Context, did string) (_ []string, err error) {
+	start := time.Now()
+	defer func() { observeOperation("GetCollections", start, err) }()
+
 	_, span := db.tracer.Start(ctx, "GetCollections")
 	defer span.End()
 

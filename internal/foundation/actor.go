@@ -6,6 +6,7 @@ import (
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/jcalabro/atlas/internal/types"
+	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -34,22 +35,33 @@ func ValidateActor(a *types.Actor) error {
 	return nil
 }
 
-func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) error {
-	_, span := db.tracer.Start(ctx, "SaveActor")
-	defer span.End()
+func (db *DB) SaveActor(ctx context.Context, actor *types.Actor) (err error) {
+	_, span, done := db.observe(ctx, "SaveActor")
+	defer func() { done(err) }()
 
-	if err := ValidateActor(actor); err != nil {
-		return fmt.Errorf("invalid actor: %w", err)
+	span.SetAttributes(
+		attribute.String("did", actor.Did),
+		attribute.String("handle", actor.Handle),
+		attribute.Bool("email_confirmed", actor.EmailConfirmed),
+		attribute.Bool("active", actor.Active),
+		attribute.String("head", actor.Head),
+		attribute.String("rev", actor.Rev),
+		attribute.String("pds_host", actor.PdsHost),
+	)
+
+	if err = ValidateActor(actor); err != nil {
+		err = fmt.Errorf("invalid actor: %w", err)
+		return
 	}
 
-	_, err := transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
+	_, err = transaction(db.db, func(tx fdb.Transaction) ([]byte, error) {
 		return nil, db.saveActorTx(tx, actor)
 	})
 
-	return err
+	return
 }
 
-// saveActorTx saves an actor within an existing transaction
+// Saves an actor using an existing transaction
 func (db *DB) saveActorTx(tx fdb.Transaction, actor *types.Actor) error {
 	buf, err := proto.Marshal(actor)
 	if err != nil {
@@ -69,54 +81,58 @@ func (db *DB) saveActorTx(tx fdb.Transaction, actor *types.Actor) error {
 	return nil
 }
 
-// GetActorHeadTx reads just the actor's current Head within an existing transaction.
-// Returns empty string if actor not found.
-func (db *DB) GetActorHeadTx(tx fdb.Transaction, did string) (string, error) {
+// Returns the actor with the given DID, with reads executed using the given transaction
+func (db *DB) getActorByDIDTx(tx fdb.ReadTransaction, did string) (*types.Actor, error) {
 	actorKey := pack(db.actors.actors, did)
 	buf, err := tx.Get(actorKey).Get()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if len(buf) == 0 {
-		return "", nil
+		return nil, nil
 	}
 
 	var actor types.Actor
 	if err := proto.Unmarshal(buf, &actor); err != nil {
-		return "", err
-	}
-
-	return actor.Head, nil
-}
-
-func (db *DB) GetActorByDID(ctx context.Context, did string) (*types.Actor, error) {
-	_, span := db.tracer.Start(ctx, "GetActorByDID")
-	defer span.End()
-
-	actorKey := pack(db.actors.actors, did)
-
-	var actor types.Actor
-	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
-		return tx.Get(actorKey).Get()
-	})
-	if err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, nil
 	}
 
 	return &actor, nil
 }
 
-func (db *DB) GetActorByEmail(ctx context.Context, pdsHost, email string) (*types.Actor, error) {
-	_, span := db.tracer.Start(ctx, "GetActorByEmail")
-	defer span.End()
+func (db *DB) GetActorByDID(ctx context.Context, did string) (actor *types.Actor, err error) {
+	_, span, done := db.observe(ctx, "GetActorByDID")
+	defer func() { done(err) }()
+
+	span.SetAttributes(attribute.String("did", actor.Did))
+
+	actorKey := pack(db.actors.actors, did)
+
+	var a types.Actor
+	err = readProto(db.db, &a, func(tx fdb.ReadTransaction) ([]byte, error) {
+		return tx.Get(actorKey).Get()
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	actor = &a
+	return
+}
+
+func (db *DB) GetActorByEmail(ctx context.Context, pdsHost, email string) (actor *types.Actor, err error) {
+	_, span, done := db.observe(ctx, "GetActorByEmail")
+	defer func() { done(err) }()
+
+	span.SetAttributes(
+		attribute.String("pds_host", pdsHost),
+		attribute.String("email", email),
+	)
 
 	didByEmailKey := pack(db.actors.didsByEmail, pdsHost, email)
 
-	var actor types.Actor
-	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
+	var a types.Actor
+	err = readProto(db.db, &a, func(tx fdb.ReadTransaction) ([]byte, error) {
 		did, err := tx.Get(didByEmailKey).Get()
 		if err != nil {
 			return nil, err
@@ -131,21 +147,21 @@ func (db *DB) GetActorByEmail(ctx context.Context, pdsHost, email string) (*type
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, nil
-	}
 
-	return &actor, nil
+	actor = &a
+	return
 }
 
-func (db *DB) GetActorByHandle(ctx context.Context, handle string) (*types.Actor, error) {
-	_, span := db.tracer.Start(ctx, "GetActorByHandle")
-	defer span.End()
+func (db *DB) GetActorByHandle(ctx context.Context, handle string) (actor *types.Actor, err error) {
+	_, span, done := db.observe(ctx, "GetActorByHandle")
+	defer func() { done(err) }()
+
+	span.SetAttributes(attribute.String("handle", handle))
 
 	didByHandleKey := pack(db.actors.didsByHandle, handle)
 
-	var actor types.Actor
-	ok, err := readProto(db.db, &actor, func(tx fdb.ReadTransaction) ([]byte, error) {
+	var a types.Actor
+	err = readProto(db.db, &a, func(tx fdb.ReadTransaction) ([]byte, error) {
 		did, err := tx.Get(didByHandleKey).Get()
 		if err != nil {
 			return nil, err
@@ -160,16 +176,25 @@ func (db *DB) GetActorByHandle(ctx context.Context, handle string) (*types.Actor
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, nil
-	}
 
-	return &actor, nil
+	actor = &a
+	return
 }
 
-func (db *DB) ListActors(ctx context.Context, pdsHost, cursor string, limit int64) ([]*types.Actor, string, error) {
-	_, span := db.tracer.Start(ctx, "ListActors")
-	defer span.End()
+func (db *DB) ListActors(
+	ctx context.Context,
+	pdsHost,
+	cursor string,
+	limit int64,
+) (actors []*types.Actor, nextCursor string, err error) {
+	_, span, done := db.observe(ctx, "ListActors")
+	defer func() { done(err) }()
+
+	span.SetAttributes(
+		attribute.String("pds_host", pdsHost),
+		attribute.String("cursor", cursor),
+		attribute.Int64("limit", limit),
+	)
 
 	bufs, err := readTransaction(db.db, func(tx fdb.ReadTransaction) ([][]byte, error) {
 		// create range for all keys with this pds_host prefix
@@ -229,24 +254,25 @@ func (db *DB) ListActors(ctx context.Context, pdsHost, cursor string, limit int6
 		return out, nil
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to list actors: %w", err)
+		return nil, "", err
 	}
 
-	actors := make([]*types.Actor, 0, len(bufs))
+	// unmarshal result buffers
+	results := make([]*types.Actor, 0, len(bufs))
 	for _, buf := range bufs {
 		var actor types.Actor
-		if err := proto.Unmarshal(buf, &actor); err != nil {
+		if err = proto.Unmarshal(buf, &actor); err != nil {
 			return nil, "", fmt.Errorf("failed to unmarshal actor: %w", err)
 		}
-		actors = append(actors, &actor)
+		results = append(results, &actor)
 	}
 
 	// determine the next cursor for pagination
-	var nextCursor string
-	if int64(len(actors)) > limit {
-		nextCursor = actors[limit-1].Did
-		actors = actors[:limit]
+	if int64(len(results)) > limit {
+		nextCursor = results[limit-1].Did
+		results = results[:limit]
 	}
 
-	return actors, nextCursor, nil
+	actors = results
+	return
 }
