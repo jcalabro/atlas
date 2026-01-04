@@ -53,15 +53,20 @@ func pdsCmd() *cli.Command {
 				Usage: "Path to TOML config file containing PDS host configurations",
 				Value: defaultConfigFile,
 			},
+			&cli.StringSliceFlag{
+				Name:  "fallback-appview-csv",
+				Usage: "URLs of fallback appview servers to which XRPC requests will be proxied if the atproto-proxy is not supplied",
+			},
 		),
 		Action: func(ctx context.Context, c *cli.Command) error {
 			return pds.Run(ctx, &pds.Args{
-				Addr:         c.String("addr"),
-				MetricsAddr:  c.String("metrics-addr"),
-				ReadTimeout:  c.Duration("read-timeout"),
-				WriteTimeout: c.Duration("write-timeout"),
-				PLCURL:       c.String("plc"),
-				ConfigFile:   c.String("config"),
+				Addr:                c.String("addr"),
+				MetricsAddr:         c.String("metrics-addr"),
+				ReadTimeout:         c.Duration("read-timeout"),
+				WriteTimeout:        c.Duration("write-timeout"),
+				PLCURL:              c.String("plc"),
+				ConfigFile:          c.String("config"),
+				FallbackAppviewURLs: c.StringSlice("fallback-appview-csv"),
 				FDB: db.Config{
 					ClusterFile: c.String("fdb-cluster-file"),
 					APIVersion:  c.Int("fdb-api-version"),

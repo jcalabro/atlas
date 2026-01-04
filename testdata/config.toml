@@ -5,3 +5,11 @@ user_domains = [".dev.atlaspds.net"]
 contact_email = ""
 privacy_policy = ""
 terms_of_service = ""
+
+[hosts."localhost"]
+service_did = "did:web:localhost"
+jwt_signing_key = "./testdata/jwt-signing-key.pem"
+user_domains = [".localhost"]
+contact_email = ""
+privacy_policy = ""
+terms_of_service = ""

@@ -35,8 +35,9 @@ type Args struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 
-	PLCURL     string
-	ConfigFile string
+	PLCURL              string
+	ConfigFile          string
+	FallbackAppviewURLs []string
 
 	FDB db.Config
 }
@@ -51,8 +52,9 @@ type server struct {
 
 	db *db.DB
 
-	directory identity.Directory
-	plc       plc.PLC
+	directory    identity.Directory
+	plc          plc.PLC
+	appviewProxy *appviewProxy
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -92,6 +94,11 @@ func Run(ctx context.Context, args *Args) error {
 		return err
 	}
 
+	appviewProxy := newAppviewProxy(log, args.FallbackAppviewURLs)
+	if appviewProxy != nil {
+		log.Info("configured appview proxy", "num_backends", len(args.FallbackAppviewURLs))
+	}
+
 	s := &server{
 		log:    log,
 		tracer: tracer,
@@ -103,7 +110,8 @@ func Run(ctx context.Context, args *Args) error {
 		// @TODO (jrc): use foundation rather than caching in-memory
 		directory: identity.DefaultDirectory(),
 
-		plc: plcClient,
+		plc:          plcClient,
+		appviewProxy: appviewProxy,
 	}
 
 	cancelOnce := &sync.Once{}
@@ -131,6 +139,11 @@ func Run(ctx context.Context, args *Args) error {
 
 	errs.Go(func() error {
 		metrics.RunServer(ctx, cancel, args.MetricsAddr)
+		return nil
+	})
+
+	errs.Go(func() error {
+		s.appviewProxy.Start(ctx)
 		return nil
 	})
 
@@ -297,6 +310,13 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getLatestCommit", s.handleGetLatestCommit)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepoStatus", s.handleGetRepoStatus)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepo", s.handleGetRepo)
+
+	//
+	// Proxy catch-all for unhandled XRPC requests
+	//
+
+	mux.HandleFunc("GET /xrpc/", s.handleProxy)
+	mux.HandleFunc("POST /xrpc/", s.handleProxy)
 
 	return mux
 }
