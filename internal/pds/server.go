@@ -344,6 +344,8 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepoStatus", s.handleGetRepoStatus)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepo", s.handleGetRepo)
 
+	mux.HandleFunc("GET /xrpc/app.bsky.feed.getFeed", s.handleGetFeed)
+
 	//
 	// Proxy catch-all for unhandled XRPC requests
 	//

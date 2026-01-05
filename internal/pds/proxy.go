@@ -2,6 +2,7 @@ package pds
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,6 +11,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/bluesky-social/indigo/api/bsky"
+	lexutil "github.com/bluesky-social/indigo/lex/util"
 )
 
 // appviewBackend represents a single appview backend with health status.
@@ -138,6 +142,12 @@ func (p *appviewProxy) getHealthyBackend() (string, error) {
 
 // proxy forwards an HTTP request to a healthy appview backend.
 func (p *appviewProxy) proxy(w http.ResponseWriter, r *http.Request) error {
+	return p.proxyWithAuth(w, r, "")
+}
+
+// proxyWithAuth forwards an HTTP request to a healthy appview backend with an optional
+// service auth token. If serviceAuthToken is non-empty, it replaces the Authorization header.
+func (p *appviewProxy) proxyWithAuth(w http.ResponseWriter, r *http.Request, serviceAuthToken string) error {
 	backendURL, err := p.getHealthyBackend()
 	if err != nil {
 		return err
@@ -170,6 +180,11 @@ func (p *appviewProxy) proxy(w http.ResponseWriter, r *http.Request) error {
 		for _, value := range values {
 			proxyReq.Header.Add(key, value)
 		}
+	}
+
+	// override Authorization header with service auth token if provided
+	if serviceAuthToken != "" {
+		proxyReq.Header.Set("Authorization", "Bearer "+serviceAuthToken)
 	}
 
 	// forward the request
@@ -208,4 +223,62 @@ func (s *server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		s.log.Error("proxy error", "err", err, "path", r.URL.Path)
 		s.internalErr(w, fmt.Errorf("proxy error: %w", err))
 	}
+}
+
+// getRecordResponse is the response from com.atproto.repo.getRecord
+type getRecordResponse struct {
+	URI   string                      `json:"uri"`
+	CID   *string                     `json:"cid,omitempty"`
+	Value *lexutil.LexiconTypeDecoder `json:"value"`
+}
+
+// getFeedGenerator fetches a feed generator record from the appview and returns the feed generator DID.
+func (p *appviewProxy) getFeedGenerator(ctx context.Context, repo, collection, rkey string) (string, error) {
+	backendURL, err := p.getHealthyBackend()
+	if err != nil {
+		return "", err
+	}
+
+	u, err := url.Parse(backendURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid backend URL: %w", err)
+	}
+	u.Path = "/xrpc/com.atproto.repo.getRecord"
+	q := u.Query()
+	q.Set("repo", repo)
+	q.Set("collection", collection)
+	q.Set("rkey", rkey)
+	u.RawQuery = q.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close() // nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body) // nolint:errcheck
+		return "", fmt.Errorf("getRecord failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var record getRecordResponse
+	if err := json.NewDecoder(resp.Body).Decode(&record); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if record.Value == nil {
+		return "", fmt.Errorf("record value is nil")
+	}
+
+	feedGen, ok := record.Value.Val.(*bsky.FeedGenerator)
+	if !ok {
+		return "", fmt.Errorf("record is not a feed generator")
+	}
+
+	return feedGen.Did, nil
 }
