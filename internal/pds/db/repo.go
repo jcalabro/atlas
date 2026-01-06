@@ -3,8 +3,10 @@ package db
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/apple/foundationdb/bindings/go/src/fdb"
 	"github.com/bluesky-social/indigo/atproto/atcrypto"
@@ -13,11 +15,13 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	blocks "github.com/ipfs/go-block-format"
 	"github.com/ipfs/go-cid"
+	cbor "github.com/ipfs/go-ipld-cbor"
 	"github.com/jcalabro/atlas/internal/at"
 	"github.com/jcalabro/atlas/internal/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/multiformats/go-multihash"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ErrConcurrentModification is returned when a swapCommit check fails,
@@ -26,6 +30,42 @@ var ErrConcurrentModification = errors.New("concurrent modification detected")
 
 // cidBuilder is used to compute CIDs for DAG-CBOR encoded data
 var cidBuilder = cid.NewPrefixV1(cid.DagCBOR, multihash.SHA2_256)
+
+// buildCarFile creates a CAR file from the given blocks with the specified root CID.
+// This is used to build the blocks field of firehose events.
+func buildCarFile(root cid.Cid, blks []blocks.Block) ([]byte, error) {
+	var buf bytes.Buffer
+
+	// write CAR header
+	header := map[string]any{
+		"version": uint64(1),
+		"roots":   []cid.Cid{root},
+	}
+	headerBytes, err := cbor.DumpObject(header)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode car header: %w", err)
+	}
+
+	// write length-prefixed header
+	lenBuf := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(lenBuf, uint64(len(headerBytes)))
+	buf.Write(lenBuf[:n])
+	buf.Write(headerBytes)
+
+	// write each block as length-prefixed (cid + data)
+	for _, blk := range blks {
+		cidBytes := blk.Cid().Bytes()
+		dataBytes := blk.RawData()
+		totalLen := len(cidBytes) + len(dataBytes)
+
+		n := binary.PutUvarint(lenBuf, uint64(totalLen))
+		buf.Write(lenBuf[:n])
+		buf.Write(cidBytes)
+		buf.Write(dataBytes)
+	}
+
+	return buf.Bytes(), nil
+}
 
 // InitRepo creates an empty repository for a new account.
 // Returns the initial root CID and revision.
@@ -157,6 +197,9 @@ func (db *DB) CreateRecord(
 		newRev := clk.Next().String()
 		bs.SetRev(newRev)
 
+		// enable write tracking for firehose event generation
+		bs.EnableWriteTracking()
+
 		// load the MST from the commit's data CID
 		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
 		if err != nil {
@@ -227,6 +270,30 @@ func (db *DB) CreateRecord(
 		actor.Rev = newCommit.Rev
 		if err := db.saveActorTx(tx, actor); err != nil {
 			return nil, fmt.Errorf("failed to save actor: %w", err)
+		}
+
+		// build and write firehose event
+		carBytes, err := buildCarFile(commitCID, bs.GetWriteLog())
+		if err != nil {
+			return nil, fmt.Errorf("failed to build CAR file: %w", err)
+		}
+
+		event := &types.RepoEvent{
+			PdsHost: actor.PdsHost,
+			Repo:    actor.Did,
+			Rev:     newRev,
+			Since:   commit.Rev,
+			Commit:  commitCID.Bytes(),
+			Blocks:  carBytes,
+			Ops: []*types.RepoOp{{
+				Action: "create",
+				Path:   rpath,
+				Cid:    recordCID.Bytes(),
+			}},
+			Time: timestamppb.New(time.Now()),
+		}
+		if err := db.WriteEventTx(tx, event); err != nil {
+			return nil, fmt.Errorf("failed to write firehose event: %w", err)
 		}
 
 		return &CreateRecordResult{
@@ -302,6 +369,9 @@ func (db *DB) PutRecord(
 		// compute new rev and set it on the blockstore for secondary index writes
 		newRev := clk.Next().String()
 		bs.SetRev(newRev)
+
+		// enable write tracking for firehose event generation
+		bs.EnableWriteTracking()
 
 		// load the MST from the commit's data CID
 		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
@@ -398,6 +468,34 @@ func (db *DB) PutRecord(
 			return nil, fmt.Errorf("failed to save actor: %w", err)
 		}
 
+		// build and write firehose event
+		carBytes, err := buildCarFile(commitCID, bs.GetWriteLog())
+		if err != nil {
+			return nil, fmt.Errorf("failed to build CAR file: %w", err)
+		}
+
+		action := "update"
+		if isNewRecord {
+			action = "create"
+		}
+		event := &types.RepoEvent{
+			PdsHost: actor.PdsHost,
+			Repo:    actor.Did,
+			Rev:     newRev,
+			Since:   commit.Rev,
+			Commit:  commitCID.Bytes(),
+			Blocks:  carBytes,
+			Ops: []*types.RepoOp{{
+				Action: action,
+				Path:   string(rpath),
+				Cid:    recordCID.Bytes(),
+			}},
+			Time: timestamppb.New(time.Now()),
+		}
+		if err := db.WriteEventTx(tx, event); err != nil {
+			return nil, fmt.Errorf("failed to write firehose event: %w", err)
+		}
+
 		return &PutRecordResult{
 			RecordCID: recordCID,
 			CommitCID: commitCID,
@@ -465,6 +563,9 @@ func (db *DB) DeleteRecord(
 		newRev := clk.Next().String()
 		bs.SetRev(newRev)
 
+		// enable write tracking for firehose event generation
+		bs.EnableWriteTracking()
+
 		// load the MST from the commit's data CID
 		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
 		if err != nil {
@@ -517,6 +618,30 @@ func (db *DB) DeleteRecord(
 		actor.Rev = newCommit.Rev
 		if err := db.saveActorTx(tx, actor); err != nil {
 			return nil, fmt.Errorf("failed to save actor: %w", err)
+		}
+
+		// build and write firehose event
+		carBytes, err := buildCarFile(commitCID, bs.GetWriteLog())
+		if err != nil {
+			return nil, fmt.Errorf("failed to build CAR file: %w", err)
+		}
+
+		event := &types.RepoEvent{
+			PdsHost: actor.PdsHost,
+			Repo:    actor.Did,
+			Rev:     newRev,
+			Since:   commit.Rev,
+			Commit:  commitCID.Bytes(),
+			Blocks:  carBytes,
+			Ops: []*types.RepoOp{{
+				Action: "delete",
+				Path:   rpath,
+				// CID is nil for deletes
+			}},
+			Time: timestamppb.New(time.Now()),
+		}
+		if err := db.WriteEventTx(tx, event); err != nil {
+			return nil, fmt.Errorf("failed to write firehose event: %w", err)
 		}
 
 		return &DeleteRecordResult{

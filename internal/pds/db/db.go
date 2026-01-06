@@ -38,6 +38,9 @@ type DB struct {
 
 	// IPLD blocks for MST and record storage
 	blockDir blockDir
+
+	// Firehose events for subscribeRepos
+	eventDir eventDir
 }
 
 type actors struct {
@@ -145,6 +148,10 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	db.blockDir.blocksByRev, err = directory.CreateOrOpen(db.db, []string{"blocks_by_rev"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create blocks_by_rev directory: %w", err)
+	}
+
+	if err := db.initEventDirs(); err != nil {
+		return nil, err
 	}
 
 	return db, nil

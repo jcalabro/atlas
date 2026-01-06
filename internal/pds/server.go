@@ -57,6 +57,7 @@ type server struct {
 	directory    identity.Directory
 	plc          plc.PLC
 	appviewProxy *appviewProxy
+	firehose     *firehose
 }
 
 func (s *server) shutdown(cancel context.CancelFunc) {
@@ -137,6 +138,7 @@ func Run(ctx context.Context, args *Args) error {
 
 		plc:          plcClient,
 		appviewProxy: appviewProxy,
+		firehose:     newFirehose(log, db),
 	}
 
 	cancelOnce := &sync.Once{}
@@ -177,6 +179,11 @@ func Run(ctx context.Context, args *Args) error {
 
 	errs.Go(func() error {
 		s.appviewProxy.Start(ctx)
+		return nil
+	})
+
+	errs.Go(func() error {
+		s.firehose.Run(ctx)
 		return nil
 	})
 
@@ -343,6 +350,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getLatestCommit", s.handleGetLatestCommit)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepoStatus", s.handleGetRepoStatus)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepo", s.handleGetRepo)
+	mux.HandleFunc("GET /xrpc/com.atproto.sync.subscribeRepos", s.handleSubscribeRepos)
 
 	mux.HandleFunc("GET /xrpc/app.bsky.feed.getFeed", s.handleGetFeed)
 

@@ -26,6 +26,11 @@ type blockstore struct {
 	// rev is the revision being written. Used to populate the blocks_by_rev index.
 	// Only set for write blockstores.
 	rev string
+
+	// writeLog tracks blocks written during this transaction for building CAR files.
+	// Only populated when trackWrites is true.
+	trackWrites bool
+	writeLog    []blocks.Block
 }
 
 // newReadBlockstore creates a read-only blockstore bound to an FDB read transaction.
@@ -52,6 +57,18 @@ func (db *DB) newWriteBlockstore(did string, tx fdb.Transaction) *blockstore {
 // populate the blocks_by_rev secondary index for incremental sync.
 func (bs *blockstore) SetRev(rev string) {
 	bs.rev = rev
+}
+
+// EnableWriteTracking enables tracking of blocks written to this blockstore.
+// Use GetWriteLog to retrieve the tracked blocks for building CAR files.
+func (bs *blockstore) EnableWriteTracking() {
+	bs.trackWrites = true
+	bs.writeLog = nil
+}
+
+// GetWriteLog returns all blocks written since EnableWriteTracking was called.
+func (bs *blockstore) GetWriteLog() []blocks.Block {
+	return bs.writeLog
 }
 
 // Get retrieves a block by its CID.
@@ -122,6 +139,11 @@ func (bs *blockstore) Put(ctx context.Context, blk blocks.Block) error {
 		(*bs.writeTx).Set(revKey, nil)
 	}
 
+	// track writes for CAR file generation
+	if bs.trackWrites {
+		bs.writeLog = append(bs.writeLog, blk)
+	}
+
 	return nil
 }
 
@@ -140,6 +162,11 @@ func (bs *blockstore) PutMany(ctx context.Context, blks []blocks.Block) error {
 		if bs.rev != "" {
 			revKey := pack(bs.db.blockDir.blocksByRev, bs.did, bs.rev, blk.Cid().Bytes())
 			(*bs.writeTx).Set(revKey, nil)
+		}
+
+		// track writes for CAR file generation
+		if bs.trackWrites {
+			bs.writeLog = append(bs.writeLog, blk)
 		}
 	}
 

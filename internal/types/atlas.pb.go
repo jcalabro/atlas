@@ -315,6 +315,198 @@ func (x *Record) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// RepoEvent represents a commit event to be streamed via the firehose.
+// Stored in FDB with a versionstamp key for global ordering.
+type RepoEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Sequence number assigned by FDB versionstamp (set after commit)
+	Seq int64 `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
+	// The PDS host this event originated from
+	PdsHost string `protobuf:"bytes,2,opt,name=pds_host,json=pdsHost,proto3" json:"pds_host,omitempty"`
+	// The repo (DID) that was modified
+	Repo string `protobuf:"bytes,3,opt,name=repo,proto3" json:"repo,omitempty"`
+	// The new revision after this commit
+	Rev string `protobuf:"bytes,4,opt,name=rev,proto3" json:"rev,omitempty"`
+	// The previous revision (nil for first commit)
+	Since string `protobuf:"bytes,5,opt,name=since,proto3" json:"since,omitempty"`
+	// CID of the commit object
+	Commit []byte `protobuf:"bytes,6,opt,name=commit,proto3" json:"commit,omitempty"`
+	// CAR file containing the blocks for this commit
+	Blocks []byte `protobuf:"bytes,7,opt,name=blocks,proto3" json:"blocks,omitempty"`
+	// Operations performed in this commit
+	Ops []*RepoOp `protobuf:"bytes,8,rep,name=ops,proto3" json:"ops,omitempty"`
+	// Timestamp of the commit
+	Time *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=time,proto3" json:"time,omitempty"`
+	// Whether this commit is too big to include blocks inline
+	TooBig        bool `protobuf:"varint,10,opt,name=too_big,json=tooBig,proto3" json:"too_big,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepoEvent) Reset() {
+	*x = RepoEvent{}
+	mi := &file_atlas_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepoEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepoEvent) ProtoMessage() {}
+
+func (x *RepoEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepoEvent.ProtoReflect.Descriptor instead.
+func (*RepoEvent) Descriptor() ([]byte, []int) {
+	return file_atlas_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *RepoEvent) GetSeq() int64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *RepoEvent) GetPdsHost() string {
+	if x != nil {
+		return x.PdsHost
+	}
+	return ""
+}
+
+func (x *RepoEvent) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *RepoEvent) GetRev() string {
+	if x != nil {
+		return x.Rev
+	}
+	return ""
+}
+
+func (x *RepoEvent) GetSince() string {
+	if x != nil {
+		return x.Since
+	}
+	return ""
+}
+
+func (x *RepoEvent) GetCommit() []byte {
+	if x != nil {
+		return x.Commit
+	}
+	return nil
+}
+
+func (x *RepoEvent) GetBlocks() []byte {
+	if x != nil {
+		return x.Blocks
+	}
+	return nil
+}
+
+func (x *RepoEvent) GetOps() []*RepoOp {
+	if x != nil {
+		return x.Ops
+	}
+	return nil
+}
+
+func (x *RepoEvent) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *RepoEvent) GetTooBig() bool {
+	if x != nil {
+		return x.TooBig
+	}
+	return false
+}
+
+// RepoOp represents a single operation within a commit
+type RepoOp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Action: "create", "update", or "delete"
+	Action string `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
+	// Path in the repo: "collection/rkey"
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// CID of the record (nil for deletes)
+	Cid           []byte `protobuf:"bytes,3,opt,name=cid,proto3" json:"cid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepoOp) Reset() {
+	*x = RepoOp{}
+	mi := &file_atlas_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepoOp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepoOp) ProtoMessage() {}
+
+func (x *RepoOp) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepoOp.ProtoReflect.Descriptor instead.
+func (*RepoOp) Descriptor() ([]byte, []int) {
+	return file_atlas_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RepoOp) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *RepoOp) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *RepoOp) GetCid() []byte {
+	if x != nil {
+		return x.Cid
+	}
+	return nil
+}
+
 var File_atlas_proto protoreflect.FileDescriptor
 
 const file_atlas_proto_rawDesc = "" +
@@ -353,7 +545,23 @@ const file_atlas_proto_rawDesc = "" +
 	"\x03cid\x18\x04 \x01(\tR\x03cid\x12\x14\n" +
 	"\x05value\x18\x05 \x01(\fR\x05value\x129\n" +
 	"\n" +
-	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAtB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x8e\x02\n" +
+	"\tRepoEvent\x12\x10\n" +
+	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12\x19\n" +
+	"\bpds_host\x18\x02 \x01(\tR\apdsHost\x12\x12\n" +
+	"\x04repo\x18\x03 \x01(\tR\x04repo\x12\x10\n" +
+	"\x03rev\x18\x04 \x01(\tR\x03rev\x12\x14\n" +
+	"\x05since\x18\x05 \x01(\tR\x05since\x12\x16\n" +
+	"\x06commit\x18\x06 \x01(\fR\x06commit\x12\x16\n" +
+	"\x06blocks\x18\a \x01(\fR\x06blocks\x12\x1f\n" +
+	"\x03ops\x18\b \x03(\v2\r.types.RepoOpR\x03ops\x12.\n" +
+	"\x04time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x17\n" +
+	"\atoo_big\x18\n" +
+	" \x01(\bR\x06tooBig\"F\n" +
+	"\x06RepoOp\x12\x16\n" +
+	"\x06action\x18\x01 \x01(\tR\x06action\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x10\n" +
+	"\x03cid\x18\x03 \x01(\fR\x03cidB*Z(github.com/jcalabro/atlas/internal/typesb\x06proto3"
 
 var (
 	file_atlas_proto_rawDescOnce sync.Once
@@ -367,24 +575,28 @@ func file_atlas_proto_rawDescGZIP() []byte {
 	return file_atlas_proto_rawDescData
 }
 
-var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_atlas_proto_goTypes = []any{
 	(*Actor)(nil),                 // 0: types.Actor
 	(*RefreshToken)(nil),          // 1: types.RefreshToken
 	(*Record)(nil),                // 2: types.Record
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*RepoEvent)(nil),             // 3: types.RepoEvent
+	(*RepoOp)(nil),                // 4: types.RepoOp
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_atlas_proto_depIdxs = []int32{
-	3, // 0: types.Actor.created_at:type_name -> google.protobuf.Timestamp
+	5, // 0: types.Actor.created_at:type_name -> google.protobuf.Timestamp
 	1, // 1: types.Actor.refresh_tokens:type_name -> types.RefreshToken
-	3, // 2: types.RefreshToken.created_at:type_name -> google.protobuf.Timestamp
-	3, // 3: types.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
-	3, // 4: types.Record.created_at:type_name -> google.protobuf.Timestamp
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	5, // 2: types.RefreshToken.created_at:type_name -> google.protobuf.Timestamp
+	5, // 3: types.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
+	5, // 4: types.Record.created_at:type_name -> google.protobuf.Timestamp
+	4, // 5: types.RepoEvent.ops:type_name -> types.RepoOp
+	5, // 6: types.RepoEvent.time:type_name -> google.protobuf.Timestamp
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_atlas_proto_init() }
@@ -398,7 +610,7 @@ func file_atlas_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atlas_proto_rawDesc), len(file_atlas_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

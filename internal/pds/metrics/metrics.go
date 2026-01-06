@@ -44,4 +44,32 @@ var (
 		},
 		[]string{"query", "status"},
 	)
+
+	// Firehose metrics
+	FirehoseSubscribers = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name:      "firehose_subscribers",
+			Namespace: namespace,
+			Help:      "Current number of firehose subscribers",
+		},
+		[]string{"pds_host"},
+	)
+
+	FirehoseEventsSent = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:      "firehose_events_sent",
+			Namespace: namespace,
+			Help:      "Total number of events sent to firehose subscribers",
+		},
+		[]string{"pds_host"},
+	)
+
+	FirehoseEventsDropped = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:      "firehose_events_dropped",
+			Namespace: namespace,
+			Help:      "Total number of events dropped due to slow subscribers",
+		},
+		[]string{"pds_host"},
+	)
 )

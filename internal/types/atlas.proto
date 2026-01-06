@@ -41,3 +41,53 @@ message Record {
   bytes value = 5;        // CBOR-encoded record data
   google.protobuf.Timestamp created_at = 6;
 }
+
+//
+// Firehose event types for com.atproto.sync.subscribeRepos
+//
+
+// RepoEvent represents a commit event to be streamed via the firehose.
+// Stored in FDB with a versionstamp key for global ordering.
+message RepoEvent {
+  // Sequence number assigned by FDB versionstamp (set after commit)
+  int64 seq = 1;
+
+  // The PDS host this event originated from
+  string pds_host = 2;
+
+  // The repo (DID) that was modified
+  string repo = 3;
+
+  // The new revision after this commit
+  string rev = 4;
+
+  // The previous revision (nil for first commit)
+  string since = 5;
+
+  // CID of the commit object
+  bytes commit = 6;
+
+  // CAR file containing the blocks for this commit
+  bytes blocks = 7;
+
+  // Operations performed in this commit
+  repeated RepoOp ops = 8;
+
+  // Timestamp of the commit
+  google.protobuf.Timestamp time = 9;
+
+  // Whether this commit is too big to include blocks inline
+  bool too_big = 10;
+}
+
+// RepoOp represents a single operation within a commit
+message RepoOp {
+  // Action: "create", "update", or "delete"
+  string action = 1;
+
+  // Path in the repo: "collection/rkey"
+  string path = 2;
+
+  // CID of the record (nil for deletes)
+  bytes cid = 3;
+}
