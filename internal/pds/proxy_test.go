@@ -97,9 +97,12 @@ func TestAppviewProxyHealthCheck(t *testing.T) {
 			require.Equal(t, "/xrpc/_health", r.URL.Path)
 			w.WriteHeader(http.StatusOK)
 		}))
-		defer srv.Close()
 
 		proxy := newAppviewProxy(log, []string{srv.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			srv.Close()
+		})
 		proxy.backends[0].healthy.Store(false) // start unhealthy
 
 		ctx := t.Context()
@@ -114,9 +117,12 @@ func TestAppviewProxyHealthCheck(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusInternalServerError)
 		}))
-		defer srv.Close()
 
 		proxy := newAppviewProxy(log, []string{srv.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			srv.Close()
+		})
 
 		ctx := t.Context()
 		proxy.checkHealth(ctx, proxy.backends[0])
@@ -149,9 +155,12 @@ func TestAppviewProxyStart(t *testing.T) {
 			healthCheckCount.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
-		defer srv.Close()
 
 		proxy := newAppviewProxy(log, []string{srv.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			srv.Close()
+		})
 		proxy.healthCheckInterval = 50 * time.Millisecond
 
 		ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
@@ -190,9 +199,12 @@ func TestAppviewProxyProxyRequest(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"feed":[]}`)) // nolint:errcheck
 		}))
-		defer backend.Close()
 
 		proxy := newAppviewProxy(log, []string{backend.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			backend.Close()
+		})
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/app.bsky.feed.getTimeline?limit=50", nil)
 		req.Header.Set("X-Custom-Header", "test-value")
@@ -222,9 +234,12 @@ func TestAppviewProxyProxyRequest(t *testing.T) {
 
 			w.WriteHeader(http.StatusOK)
 		}))
-		defer backend.Close()
 
 		proxy := newAppviewProxy(log, []string{backend.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			backend.Close()
+		})
 
 		req := httptest.NewRequest(http.MethodPost, "/xrpc/some.endpoint", nil)
 		req.Body = io.NopCloser(newStringReader(`{"test":"data"}`))
@@ -242,9 +257,12 @@ func TestAppviewProxyProxyRequest(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"error":"not found"}`)) // nolint:errcheck
 		}))
-		defer backend.Close()
 
 		proxy := newAppviewProxy(log, []string{backend.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			backend.Close()
+		})
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/missing.endpoint", nil)
 		w := httptest.NewRecorder()
@@ -262,9 +280,12 @@ func TestAppviewProxyProxyRequest(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"fallback":true}`)) // nolint:errcheck
 		}))
-		defer backend.Close()
 
 		proxy := newAppviewProxy(log, []string{backend.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			backend.Close()
+		})
 		proxy.backends[0].healthy.Store(false)
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/some.endpoint", nil)
@@ -283,10 +304,13 @@ func TestAppviewProxyProxyRequest(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"from":"backend2"}`)) // nolint:errcheck
 		}))
-		defer backend2.Close()
 
 		// first backend is invalid/down
 		proxy := newAppviewProxy(log, []string{"http://localhost:1", backend2.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			backend2.Close()
+		})
 		proxy.backends[0].healthy.Store(false) // mark first as unhealthy
 
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/some.endpoint", nil)
@@ -324,11 +348,14 @@ func TestHandleProxy(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"success":true}`)) // nolint:errcheck
 		}))
-		defer backend.Close()
 
 		// create a new server with appview configured
 		srvWithProxy := testServer(t)
 		srvWithProxy.appviewProxy = newAppviewProxy(srvWithProxy.log, []string{backend.URL})
+		t.Cleanup(func() {
+			srvWithProxy.appviewProxy.CloseIdleConnections()
+			backend.Close()
+		})
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/xrpc/app.bsky.feed.getTimeline", nil)

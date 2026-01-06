@@ -44,11 +44,31 @@ func newAppviewProxy(log *slog.Logger, urls []string) *appviewProxy {
 		backends[i].healthy.Store(true) // assume healthy initially
 	}
 
+	// use a custom transport so we can close idle connections
+	transport := &http.Transport{
+		MaxIdleConns:        10,
+		IdleConnTimeout:     30 * time.Second,
+		DisableCompression:  true,
+		DisableKeepAlives:   false,
+		MaxIdleConnsPerHost: 2,
+	}
+
 	return &appviewProxy{
 		log:                 log.With("component", "appview-proxy"),
 		backends:            backends,
-		client:              &http.Client{Timeout: 15 * time.Second},
+		client:              &http.Client{Timeout: 15 * time.Second, Transport: transport},
 		healthCheckInterval: 15 * time.Second,
+	}
+}
+
+// CloseIdleConnections closes any idle connections in the proxy's HTTP client.
+// This should be called when the proxy is no longer needed.
+func (p *appviewProxy) CloseIdleConnections() {
+	if p == nil || p.client == nil {
+		return
+	}
+	if transport, ok := p.client.Transport.(*http.Transport); ok {
+		transport.CloseIdleConnections()
 	}
 }
 
