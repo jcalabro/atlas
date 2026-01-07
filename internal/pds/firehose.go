@@ -60,6 +60,7 @@ type firehose struct {
 type subscriber struct {
 	id       string
 	conn     *websocket.Conn
+	connMu   sync.Mutex // protects writes to conn
 	events   chan *types.RepoEvent
 	pdsHost  string // empty means all hosts
 	cancelFn context.CancelFunc
@@ -257,8 +258,11 @@ func (f *firehose) Subscribe(ctx context.Context, w http.ResponseWriter, r *http
 			case <-subCtx.Done():
 				return
 			case <-ticker.C:
-				conn.SetWriteDeadline(time.Now().Add(writeTimeout)) //nolint:errcheck
-				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				sub.connMu.Lock()
+				sub.conn.SetWriteDeadline(time.Now().Add(writeTimeout)) //nolint:errcheck
+				err := sub.conn.WriteMessage(websocket.PingMessage, nil)
+				sub.connMu.Unlock()
+				if err != nil {
 					f.log.Debug("failed to send ping", "err", err, "id", sub.id)
 					cancel()
 					return
@@ -329,6 +333,8 @@ func (f *firehose) sendEvent(sub *subscriber, event *types.RepoEvent) error {
 		return fmt.Errorf("failed to encode event: %w", err)
 	}
 
+	sub.connMu.Lock()
+	defer sub.connMu.Unlock()
 	sub.conn.SetWriteDeadline(time.Now().Add(writeTimeout)) //nolint:errcheck
 	return sub.conn.WriteMessage(websocket.BinaryMessage, msg)
 }
