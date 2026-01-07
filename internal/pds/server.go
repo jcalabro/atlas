@@ -212,7 +212,7 @@ func Run(ctx context.Context, args *Args) error {
 func (s *server) serve(ctx context.Context, cancel context.CancelFunc, args *Args) error {
 	defer cancel()
 
-	handler := s.observabilityMiddleware(s.hostMiddleware(s.router()))
+	handler := s.corsMiddleware(s.observabilityMiddleware(s.hostMiddleware(s.router())))
 
 	srv := &http.Server{
 		Handler:      handler,
