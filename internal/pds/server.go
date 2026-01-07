@@ -52,7 +52,8 @@ type server struct {
 	hosts      map[string]*loadedHostConfig
 	configFile string
 
-	db *db.DB
+	db        *db.DB
+	blobstore *blobstore
 
 	directory    identity.Directory
 	plc          plc.PLC
@@ -70,17 +71,17 @@ func (s *server) shutdown(cancel context.CancelFunc) {
 func (s *server) reloadConfig() {
 	s.log.Info("reloading configuration", "file", s.configFile)
 
-	hosts, err := LoadConfig(s.configFile)
+	cfg, err := LoadConfig(s.configFile)
 	if err != nil {
 		s.log.Error("failed to reload config", "err", err)
 		return
 	}
 
 	s.hostsMu.Lock()
-	s.hosts = hosts
+	s.hosts = cfg.Hosts
 	s.hostsMu.Unlock()
 
-	s.log.Info("configuration reloaded successfully", "num_hosts", len(hosts))
+	s.log.Info("configuration reloaded successfully", "num_hosts", len(cfg.Hosts))
 }
 
 func (s *server) getHost(hostname string) *loadedHostConfig {
@@ -100,11 +101,11 @@ func Run(ctx context.Context, args *Args) error {
 	}
 	tracer := otel.Tracer(serviceName)
 
-	hosts, err := LoadConfig(args.ConfigFile)
+	cfg, err := LoadConfig(args.ConfigFile)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
-	log.Info("loaded host configurations", "hosts", len(hosts))
+	log.Info("loaded host configurations", "hosts", len(cfg.Hosts))
 
 	plcClient, err := plc.NewClient(&plc.ClientArgs{
 		Tracer: tracer,
@@ -124,14 +125,24 @@ func Run(ctx context.Context, args *Args) error {
 		log.Info("configured appview proxy", "num_backends", len(args.FallbackAppviewURLs))
 	}
 
+	var bs *blobstore
+	if cfg.Blobstore != nil {
+		bs, err = newBlobstore(cfg.Blobstore)
+		if err != nil {
+			return fmt.Errorf("failed to initialize blobstore: %w", err)
+		}
+		log.Info("initialized blobstore", "endpoint", cfg.Blobstore.Endpoint, "bucket", cfg.Blobstore.Bucket)
+	}
+
 	s := &server{
 		log:    log,
 		tracer: tracer,
 
-		hosts:      hosts,
+		hosts:      cfg.Hosts,
 		configFile: args.ConfigFile,
 
-		db: db,
+		db:        db,
+		blobstore: bs,
 
 		// @TODO (jrc): use foundation rather than caching in-memory
 		directory: identity.DefaultDirectory(),
@@ -338,6 +349,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.putRecord", s.authMiddleware(s.handlePutRecord))
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.deleteRecord", s.authMiddleware(s.handleDeleteRecord))
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.applyWrites", s.authMiddleware(s.handleApplyWrites))
+	mux.HandleFunc("POST /xrpc/com.atproto.repo.uploadBlob", s.authMiddleware(s.handleUploadBlob))
 
 	mux.HandleFunc("GET /xrpc/com.atproto.server.describeServer", s.handleDescribeServer)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)
@@ -347,6 +359,8 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("POST /xrpc/com.atproto.server.deleteSession", s.authMiddleware(s.handleDeleteSession))
 
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.listRepos", s.handleListRepos)
+	mux.HandleFunc("GET /xrpc/com.atproto.sync.listBlobs", s.handleListBlobs)
+	mux.HandleFunc("GET /xrpc/com.atproto.sync.getBlob", s.handleGetBlob)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getBlocks", s.handleGetBlocks)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getLatestCommit", s.handleGetLatestCommit)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepoStatus", s.handleGetRepoStatus)

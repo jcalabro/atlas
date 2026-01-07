@@ -178,6 +178,83 @@ func (x *Actor) GetPreferences() []byte {
 	return nil
 }
 
+// Blob stores metadata about an uploaded blob
+type Blob struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Did           string                 `protobuf:"bytes,1,opt,name=did,proto3" json:"did,omitempty"`                           // DID of the owner
+	Cid           []byte                 `protobuf:"bytes,2,opt,name=cid,proto3" json:"cid,omitempty"`                           // CID of the blob content
+	MimeType      string                 `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"` // MIME type of the blob
+	Size          int64                  `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`                        // size in bytes
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Blob) Reset() {
+	*x = Blob{}
+	mi := &file_atlas_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Blob) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Blob) ProtoMessage() {}
+
+func (x *Blob) ProtoReflect() protoreflect.Message {
+	mi := &file_atlas_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Blob.ProtoReflect.Descriptor instead.
+func (*Blob) Descriptor() ([]byte, []int) {
+	return file_atlas_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Blob) GetDid() string {
+	if x != nil {
+		return x.Did
+	}
+	return ""
+}
+
+func (x *Blob) GetCid() []byte {
+	if x != nil {
+		return x.Cid
+	}
+	return nil
+}
+
+func (x *Blob) GetMimeType() string {
+	if x != nil {
+		return x.MimeType
+	}
+	return ""
+}
+
+func (x *Blob) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *Blob) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
 type RefreshToken struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -189,7 +266,7 @@ type RefreshToken struct {
 
 func (x *RefreshToken) Reset() {
 	*x = RefreshToken{}
-	mi := &file_atlas_proto_msgTypes[1]
+	mi := &file_atlas_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -201,7 +278,7 @@ func (x *RefreshToken) String() string {
 func (*RefreshToken) ProtoMessage() {}
 
 func (x *RefreshToken) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[1]
+	mi := &file_atlas_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -214,7 +291,7 @@ func (x *RefreshToken) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshToken.ProtoReflect.Descriptor instead.
 func (*RefreshToken) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{1}
+	return file_atlas_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RefreshToken) GetToken() string {
@@ -253,7 +330,7 @@ type Record struct {
 
 func (x *Record) Reset() {
 	*x = Record{}
-	mi := &file_atlas_proto_msgTypes[2]
+	mi := &file_atlas_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -265,7 +342,7 @@ func (x *Record) String() string {
 func (*Record) ProtoMessage() {}
 
 func (x *Record) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[2]
+	mi := &file_atlas_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -278,7 +355,7 @@ func (x *Record) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Record.ProtoReflect.Descriptor instead.
 func (*Record) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{2}
+	return file_atlas_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Record) GetDid() string {
@@ -353,7 +430,7 @@ type RepoEvent struct {
 
 func (x *RepoEvent) Reset() {
 	*x = RepoEvent{}
-	mi := &file_atlas_proto_msgTypes[3]
+	mi := &file_atlas_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -365,7 +442,7 @@ func (x *RepoEvent) String() string {
 func (*RepoEvent) ProtoMessage() {}
 
 func (x *RepoEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[3]
+	mi := &file_atlas_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -378,7 +455,7 @@ func (x *RepoEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepoEvent.ProtoReflect.Descriptor instead.
 func (*RepoEvent) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{3}
+	return file_atlas_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *RepoEvent) GetSeq() int64 {
@@ -466,7 +543,7 @@ type RepoOp struct {
 
 func (x *RepoOp) Reset() {
 	*x = RepoOp{}
-	mi := &file_atlas_proto_msgTypes[4]
+	mi := &file_atlas_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -478,7 +555,7 @@ func (x *RepoOp) String() string {
 func (*RepoOp) ProtoMessage() {}
 
 func (x *RepoOp) ProtoReflect() protoreflect.Message {
-	mi := &file_atlas_proto_msgTypes[4]
+	mi := &file_atlas_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -491,7 +568,7 @@ func (x *RepoOp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RepoOp.ProtoReflect.Descriptor instead.
 func (*RepoOp) Descriptor() ([]byte, []int) {
-	return file_atlas_proto_rawDescGZIP(), []int{4}
+	return file_atlas_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *RepoOp) GetAction() string {
@@ -538,7 +615,14 @@ const file_atlas_proto_rawDesc = "" +
 	"\x04head\x18\f \x01(\tR\x04head\x12\x10\n" +
 	"\x03rev\x18\r \x01(\tR\x03rev\x12\x19\n" +
 	"\bpds_host\x18\x0e \x01(\tR\apdsHost\x12 \n" +
-	"\vpreferences\x18\x0f \x01(\fR\vpreferences\"\x9a\x01\n" +
+	"\vpreferences\x18\x0f \x01(\fR\vpreferences\"\x96\x01\n" +
+	"\x04Blob\x12\x10\n" +
+	"\x03did\x18\x01 \x01(\tR\x03did\x12\x10\n" +
+	"\x03cid\x18\x02 \x01(\fR\x03cid\x12\x1b\n" +
+	"\tmime_type\x18\x03 \x01(\tR\bmimeType\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\x129\n" +
+	"\n" +
+	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x9a\x01\n" +
 	"\fRefreshToken\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x129\n" +
 	"\n" +
@@ -584,28 +668,30 @@ func file_atlas_proto_rawDescGZIP() []byte {
 	return file_atlas_proto_rawDescData
 }
 
-var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_atlas_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_atlas_proto_goTypes = []any{
 	(*Actor)(nil),                 // 0: types.Actor
-	(*RefreshToken)(nil),          // 1: types.RefreshToken
-	(*Record)(nil),                // 2: types.Record
-	(*RepoEvent)(nil),             // 3: types.RepoEvent
-	(*RepoOp)(nil),                // 4: types.RepoOp
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(*Blob)(nil),                  // 1: types.Blob
+	(*RefreshToken)(nil),          // 2: types.RefreshToken
+	(*Record)(nil),                // 3: types.Record
+	(*RepoEvent)(nil),             // 4: types.RepoEvent
+	(*RepoOp)(nil),                // 5: types.RepoOp
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
 }
 var file_atlas_proto_depIdxs = []int32{
-	5, // 0: types.Actor.created_at:type_name -> google.protobuf.Timestamp
-	1, // 1: types.Actor.refresh_tokens:type_name -> types.RefreshToken
-	5, // 2: types.RefreshToken.created_at:type_name -> google.protobuf.Timestamp
-	5, // 3: types.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
-	5, // 4: types.Record.created_at:type_name -> google.protobuf.Timestamp
-	4, // 5: types.RepoEvent.ops:type_name -> types.RepoOp
-	5, // 6: types.RepoEvent.time:type_name -> google.protobuf.Timestamp
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	6, // 0: types.Actor.created_at:type_name -> google.protobuf.Timestamp
+	2, // 1: types.Actor.refresh_tokens:type_name -> types.RefreshToken
+	6, // 2: types.Blob.created_at:type_name -> google.protobuf.Timestamp
+	6, // 3: types.RefreshToken.created_at:type_name -> google.protobuf.Timestamp
+	6, // 4: types.RefreshToken.expires_at:type_name -> google.protobuf.Timestamp
+	6, // 5: types.Record.created_at:type_name -> google.protobuf.Timestamp
+	5, // 6: types.RepoEvent.ops:type_name -> types.RepoOp
+	6, // 7: types.RepoEvent.time:type_name -> google.protobuf.Timestamp
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_atlas_proto_init() }
@@ -619,7 +705,7 @@ func file_atlas_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atlas_proto_rawDesc), len(file_atlas_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

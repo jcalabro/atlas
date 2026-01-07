@@ -12,7 +12,17 @@ import (
 
 // Config represents the TOML configuration file structure
 type Config struct {
-	Hosts map[string]Host `toml:"hosts"`
+	Hosts     map[string]Host  `toml:"hosts"`
+	Blobstore *BlobstoreConfig `toml:"blobstore"`
+}
+
+// BlobstoreConfig contains S3-compatible storage settings
+type BlobstoreConfig struct {
+	Endpoint  string `toml:"endpoint"`
+	Bucket    string `toml:"bucket"`
+	Region    string `toml:"region"`
+	AccessKey string `toml:"access_key"`
+	SecretKey string `toml:"secret_key"`
 }
 
 // Host contains configuration for a single PDS hostname
@@ -36,8 +46,14 @@ type loadedHostConfig struct {
 	termsOfService string
 }
 
+// LoadedConfig contains the fully parsed configuration
+type LoadedConfig struct {
+	Hosts     map[string]*loadedHostConfig
+	Blobstore *BlobstoreConfig
+}
+
 // LoadConfig reads and parses the TOML config file, loading all signing keys
-func LoadConfig(path string) (map[string]*loadedHostConfig, error) {
+func LoadConfig(path string) (*LoadedConfig, error) {
 	var cfg Config
 	if _, err := toml.DecodeFile(path, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to decode config file: %w", err)
@@ -69,7 +85,10 @@ func LoadConfig(path string) (map[string]*loadedHostConfig, error) {
 		}
 	}
 
-	return hosts, nil
+	return &LoadedConfig{
+		Hosts:     hosts,
+		Blobstore: cfg.Blobstore,
+	}, nil
 }
 
 func validateHostConfig(hostname string, cfg *Host) error {

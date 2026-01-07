@@ -27,6 +27,15 @@ message Actor {
   bytes preferences = 15; // JSON-encoded user preferences
 }
 
+// Blob stores metadata about an uploaded blob
+message Blob {
+  string did = 1;           // DID of the owner
+  bytes cid = 2;            // CID of the blob content
+  string mime_type = 3;     // MIME type of the blob
+  int64 size = 4;           // size in bytes
+  google.protobuf.Timestamp created_at = 5;
+}
+
 message RefreshToken {
   string token = 1;
   google.protobuf.Timestamp created_at = 2;

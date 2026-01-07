@@ -41,6 +41,9 @@ type DB struct {
 
 	// Firehose events for subscribeRepos
 	eventDir eventDir
+
+	// Blob metadata (actual blob data is in S3)
+	blobs directory.DirectorySubspace
 }
 
 type actors struct {
@@ -148,6 +151,11 @@ func New(tracer trace.Tracer, cfg Config) (*DB, error) {
 	db.blockDir.blocksByRev, err = directory.CreateOrOpen(db.db, []string{"blocks_by_rev"}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create blocks_by_rev directory: %w", err)
+	}
+
+	db.blobs, err = directory.CreateOrOpen(db.db, []string{"blobs"}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create blobs directory: %w", err)
 	}
 
 	if err := db.initEventDirs(); err != nil {
