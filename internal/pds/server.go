@@ -354,6 +354,9 @@ func (s *server) router() *http.ServeMux {
 
 	mux.HandleFunc("GET /xrpc/app.bsky.feed.getFeed", s.handleGetFeed)
 
+	mux.HandleFunc("GET /xrpc/app.bsky.actor.getPreferences", s.authMiddleware(s.handleGetPreferences))
+	mux.HandleFunc("POST /xrpc/app.bsky.actor.putPreferences", s.authMiddleware(s.handlePutPreferences))
+
 	//
 	// Proxy catch-all for unhandled XRPC requests
 	//
