@@ -496,6 +496,49 @@ func TestHandleProxy(t *testing.T) {
 	})
 }
 
+func TestProxyWithAuthSkipsCORSHeaders(t *testing.T) {
+	t.Parallel()
+	log := slog.Default()
+
+	t.Run("does not copy CORS headers from upstream", func(t *testing.T) {
+		t.Parallel()
+
+		// upstream returns its own CORS headers that should NOT be copied
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Access-Control-Allow-Origin", "https://upstream.example.com")
+			w.Header().Set("Access-Control-Allow-Methods", "GET")
+			w.Header().Set("Access-Control-Allow-Headers", "X-Custom")
+			w.Header().Set("Access-Control-Max-Age", "999")
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("X-Custom-Header", "should-be-copied")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`)) // nolint:errcheck
+		}))
+
+		proxy := newAppviewProxy(log, []string{backend.URL})
+		t.Cleanup(func() {
+			proxy.CloseIdleConnections()
+			backend.Close()
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/some.endpoint", nil)
+		w := httptest.NewRecorder()
+
+		err := proxy.proxyWithAuth(w, req, "")
+		require.NoError(t, err)
+
+		// CORS headers from upstream should NOT be present
+		require.Empty(t, w.Header().Get("Access-Control-Allow-Origin"), "upstream CORS origin should not be copied")
+		require.Empty(t, w.Header().Get("Access-Control-Allow-Methods"), "upstream CORS methods should not be copied")
+		require.Empty(t, w.Header().Get("Access-Control-Allow-Headers"), "upstream CORS headers should not be copied")
+		require.Empty(t, w.Header().Get("Access-Control-Max-Age"), "upstream CORS max-age should not be copied")
+
+		// non-CORS headers should still be copied
+		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+		require.Equal(t, "should-be-copied", w.Header().Get("X-Custom-Header"))
+	})
+}
+
 // stringReader is a simple io.Reader that reads from a string
 type stringReader struct {
 	s string

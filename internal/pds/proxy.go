@@ -231,8 +231,11 @@ func (p *appviewProxy) proxyWithAuth(w http.ResponseWriter, r *http.Request, ser
 	metrics.ProxyDuration.WithLabelValues(r.Method).Observe(duration)
 	metrics.ProxyRequests.WithLabelValues(r.Method, strconv.Itoa(resp.StatusCode)).Inc()
 
-	// copy response headers
+	// copy response headers, but skip CORS headers since we handle those ourselves
 	for key, values := range resp.Header {
+		if strings.HasPrefix(strings.ToLower(key), "access-control-") {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
