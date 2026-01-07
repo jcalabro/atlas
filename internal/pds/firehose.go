@@ -311,14 +311,81 @@ func (f *firehose) replayEvents(ctx context.Context, sub *subscriber, cursor []b
 
 // sendEvent encodes and sends a single event to a subscriber
 func (f *firehose) sendEvent(sub *subscriber, event *types.RepoEvent) error {
-	// convert our event to the ATProto wire format
-	msg, err := encodeCommitEvent(event)
+	var msg []byte
+	var err error
+
+	// encode based on event type
+	switch event.EventType {
+	case types.EventType_EVENT_TYPE_IDENTITY:
+		msg, err = encodeIdentityEvent(event)
+	case types.EventType_EVENT_TYPE_ACCOUNT:
+		msg, err = encodeAccountEvent(event)
+	default:
+		// EVENT_TYPE_UNSPECIFIED and EVENT_TYPE_COMMIT are both commit events
+		msg, err = encodeCommitEvent(event)
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to encode event: %w", err)
 	}
 
 	sub.conn.SetWriteDeadline(time.Now().Add(writeTimeout)) //nolint:errcheck
 	return sub.conn.WriteMessage(websocket.BinaryMessage, msg)
+}
+
+// encodeIdentityEvent converts a RepoEvent (identity type) to the ATProto CBOR wire format
+func encodeIdentityEvent(event *types.RepoEvent) ([]byte, error) {
+	identity := &atproto.SyncSubscribeRepos_Identity{
+		Seq:    event.Seq,
+		Did:    event.Repo,
+		Handle: &event.Handle,
+		Time:   event.Time.AsTime().Format(time.RFC3339Nano),
+	}
+
+	var buf bytes.Buffer
+
+	header := events.EventHeader{
+		Op:      events.EvtKindMessage,
+		MsgType: "#identity",
+	}
+	if err := header.MarshalCBOR(&buf); err != nil {
+		return nil, fmt.Errorf("failed to marshal header: %w", err)
+	}
+
+	if err := identity.MarshalCBOR(&buf); err != nil {
+		return nil, fmt.Errorf("failed to marshal identity: %w", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+// encodeAccountEvent converts a RepoEvent (account type) to the ATProto CBOR wire format
+func encodeAccountEvent(event *types.RepoEvent) ([]byte, error) {
+	account := &atproto.SyncSubscribeRepos_Account{
+		Seq:    event.Seq,
+		Did:    event.Repo,
+		Active: event.Active,
+		Time:   event.Time.AsTime().Format(time.RFC3339Nano),
+	}
+	if event.Status != "" {
+		account.Status = &event.Status
+	}
+
+	var buf bytes.Buffer
+
+	header := events.EventHeader{
+		Op:      events.EvtKindMessage,
+		MsgType: "#account",
+	}
+	if err := header.MarshalCBOR(&buf); err != nil {
+		return nil, fmt.Errorf("failed to marshal header: %w", err)
+	}
+
+	if err := account.MarshalCBOR(&buf); err != nil {
+		return nil, fmt.Errorf("failed to marshal account: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // encodeCommitEvent converts a RepoEvent to the ATProto CBOR wire format

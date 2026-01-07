@@ -56,8 +56,16 @@ message Record {
 // Firehose event types for com.atproto.sync.subscribeRepos
 //
 
-// RepoEvent represents a commit event to be streamed via the firehose.
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0; // treated as commit for backwards compatibility
+  EVENT_TYPE_COMMIT = 1;
+  EVENT_TYPE_IDENTITY = 2;
+  EVENT_TYPE_ACCOUNT = 3;
+}
+
+// RepoEvent represents an event to be streamed via the firehose.
 // Stored in FDB with a versionstamp key for global ordering.
+// Can be a commit, identity, or account event based on event_type.
 message RepoEvent {
   // Sequence number assigned by FDB versionstamp (set after commit)
   int64 seq = 1;
@@ -65,29 +73,41 @@ message RepoEvent {
   // The PDS host this event originated from
   string pds_host = 2;
 
-  // The repo (DID) that was modified
+  // The repo (DID) that was modified (for commits) or the DID (for identity/account)
   string repo = 3;
 
-  // The new revision after this commit
+  // The new revision after this commit (commits only)
   string rev = 4;
 
-  // The previous revision (nil for first commit)
+  // The previous revision (nil for first commit) (commits only)
   string since = 5;
 
-  // CID of the commit object
+  // CID of the commit object (commits only)
   bytes commit = 6;
 
-  // CAR file containing the blocks for this commit
+  // CAR file containing the blocks for this commit (commits only)
   bytes blocks = 7;
 
-  // Operations performed in this commit
+  // Operations performed in this commit (commits only)
   repeated RepoOp ops = 8;
 
-  // Timestamp of the commit
+  // Timestamp of the event
   google.protobuf.Timestamp time = 9;
 
-  // Whether this commit is too big to include blocks inline
+  // Whether this commit is too big to include blocks inline (commits only)
   bool too_big = 10;
+
+  // Type of event (commit, identity, account)
+  EventType event_type = 11;
+
+  // Handle for identity events
+  string handle = 12;
+
+  // Account active status for account events
+  bool active = 13;
+
+  // Account status string for account events (e.g. "active", "suspended", "deleted")
+  string status = 14;
 }
 
 // RepoOp represents a single operation within a commit

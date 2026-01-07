@@ -147,6 +147,30 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// write identity and account events to database for firehose to pick up
+	identityEvent := &types.RepoEvent{
+		PdsHost:   host.hostname,
+		Repo:      actor.Did,
+		Handle:    actor.Handle,
+		Time:      timestamppb.Now(),
+		EventType: types.EventType_EVENT_TYPE_IDENTITY,
+	}
+	if err := s.db.WriteIdentityEvent(ctx, identityEvent); err != nil {
+		s.log.Error("failed to write identity event", "err", err, "did", actor.Did)
+	}
+
+	accountEvent := &types.RepoEvent{
+		PdsHost:   host.hostname,
+		Repo:      actor.Did,
+		Time:      timestamppb.Now(),
+		EventType: types.EventType_EVENT_TYPE_ACCOUNT,
+		Active:    true,
+		Status:    "active",
+	}
+	if err := s.db.WriteIdentityEvent(ctx, accountEvent); err != nil {
+		s.log.Error("failed to write account event", "err", err, "did", actor.Did)
+	}
+
 	session, err := s.createSession(ctx, actor)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to create session: %w", err))

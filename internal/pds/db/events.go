@@ -99,6 +99,18 @@ func (db *DB) WriteEventTx(tx fdb.Transaction, event *types.RepoEvent) error {
 	return nil
 }
 
+// WriteIdentityEvent writes an identity event to the events subspace.
+// This is used for identity events that happen outside of repo mutations.
+func (db *DB) WriteIdentityEvent(ctx context.Context, event *types.RepoEvent) (err error) {
+	_, _, done := db.observe(ctx, "WriteIdentityEvent")
+	defer func() { done(err) }()
+
+	_, err = db.db.Transact(func(tx fdb.Transaction) (any, error) {
+		return nil, db.WriteEventTx(tx, event)
+	})
+	return err
+}
+
 // GetEventsSince retrieves events starting from (but not including) the given cursor.
 // If cursor is nil, retrieves from the beginning.
 // Returns events and the cursor for the last event returned.
