@@ -20,7 +20,7 @@ import (
 
 // We use an interface so we can easily mock out PLC operations during tests
 type PLC interface {
-	CreateDID(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery string, handle string) (string, *Operation, error)
+	CreateDID(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (string, *Operation, error)
 	SendOperation(ctx context.Context, did string, op *Operation) error
 }
 
@@ -49,13 +49,12 @@ func (c *Client) CreateDID(
 	ctx context.Context,
 	sigkey *atcrypto.PrivateKeyK256,
 	rotationKey atcrypto.PrivateKey,
-	recovery string,
-	handle string,
+	recovery, handle, pdsHostname string,
 ) (string, *Operation, error) {
 	_, span := c.tracer.Start(ctx, "plc/CreateDID")
 	defer span.End()
 
-	creds, err := createDIDCredentials(sigkey, rotationKey, recovery, handle)
+	creds, err := CreateDIDCredentials(sigkey, rotationKey, recovery, handle, pdsHostname)
 	if err != nil {
 		return "", nil, err
 	}
@@ -79,17 +78,6 @@ func (c *Client) CreateDID(
 	}
 
 	return did, &op, nil
-}
-
-func createDIDCredentials(sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle string) (*DIDCredentials, error) {
-	// @TODO (jrc): load the list of supported PDS hostnames at startup
-	parts := strings.Split(handle, ".")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("invalid number of handle parts")
-	}
-	pdsHostname := fmt.Sprintf("%s.%s", parts[len(parts)-2], parts[len(parts)-1])
-
-	return CreateDIDCredentials(sigkey, rotationKey, recovery, handle, pdsHostname)
 }
 
 func CreateDIDCredentials(sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (*DIDCredentials, error) {

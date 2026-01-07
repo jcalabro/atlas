@@ -300,7 +300,7 @@ func TestHandleCreateAccount(t *testing.T) {
 
 		srv := testServer(t)
 		srv.plc = &plc.MockClient{
-			CreateDIDFunc: func(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery string, handle string) (string, *plc.Operation, error) {
+			CreateDIDFunc: func(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (string, *plc.Operation, error) {
 				return "", nil, fmt.Errorf("plc create did failed")
 			},
 		}

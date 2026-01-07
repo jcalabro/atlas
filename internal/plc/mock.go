@@ -8,11 +8,11 @@ import (
 
 // MockClient is a mock PLC client for testing
 type MockClient struct {
-	CreateDIDFunc     func(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery string, handle string) (string, *Operation, error)
+	CreateDIDFunc     func(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (string, *Operation, error)
 	SendOperationFunc func(ctx context.Context, did string, op *Operation) error
 }
 
-func (m *MockClient) SetCreateDIDFunc(fn func(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery string, handle string) (string, *Operation, error)) {
+func (m *MockClient) SetCreateDIDFunc(fn func(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (string, *Operation, error)) {
 	m.CreateDIDFunc = fn
 }
 
@@ -20,14 +20,14 @@ func (m *MockClient) SetSendOperationFunc(fn func(ctx context.Context, did strin
 	m.SendOperationFunc = fn
 }
 
-func (m *MockClient) CreateDID(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery string, handle string) (string, *Operation, error) {
+func (m *MockClient) CreateDID(ctx context.Context, sigkey *atcrypto.PrivateKeyK256, rotationKey atcrypto.PrivateKey, recovery, handle, pdsHostname string) (string, *Operation, error) {
 	fn := m.CreateDIDFunc
 
 	if fn != nil {
-		return fn(ctx, sigkey, rotationKey, recovery, handle)
+		return fn(ctx, sigkey, rotationKey, recovery, handle, pdsHostname)
 	}
 
-	creds, err := createDIDCredentials(sigkey, rotationKey, recovery, handle)
+	creds, err := CreateDIDCredentials(sigkey, rotationKey, recovery, handle, pdsHostname)
 	if err != nil {
 		return "", nil, err
 	}

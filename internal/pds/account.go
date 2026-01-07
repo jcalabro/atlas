@@ -102,7 +102,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// create a new did and submit the genesis operation to PLC
-	did, plcOp, err := s.plc.CreateDID(ctx, signingKey, rotationKey, "", in.Handle)
+	did, plcOp, err := s.plc.CreateDID(ctx, signingKey, rotationKey, "", in.Handle, host.hostname)
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to create did: %w", err))
 		return
