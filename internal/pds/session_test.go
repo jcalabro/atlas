@@ -677,7 +677,7 @@ func TestHandleCreateSession(t *testing.T) {
 		req = addHostContext(req)
 		router.ServeHTTP(w, req)
 
-		require.Equal(t, http.StatusBadRequest, w.Code)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
 	t.Run("rejects missing identifier", func(t *testing.T) {

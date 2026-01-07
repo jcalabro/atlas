@@ -87,7 +87,7 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if actor == nil || errors.Is(err, db.ErrNotFound) {
-		s.badRequest(w, fmt.Errorf("invalid account identifier or password"))
+		s.unauthorized(w, fmt.Errorf("invalid account identifier or password"))
 		return
 	}
 
