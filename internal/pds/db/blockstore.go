@@ -31,6 +31,11 @@ type blockstore struct {
 	// Only populated when trackWrites is true.
 	trackWrites bool
 	writeLog    []blocks.Block
+
+	// readLog tracks blocks read during this transaction for building proof CAR files.
+	// Only populated when trackReads is true.
+	trackReads bool
+	readLog    []blocks.Block
 }
 
 // newReadBlockstore creates a read-only blockstore bound to an FDB read transaction.
@@ -71,6 +76,18 @@ func (bs *blockstore) GetWriteLog() []blocks.Block {
 	return bs.writeLog
 }
 
+// EnableReadTracking enables tracking of blocks read from this blockstore.
+// Use GetReadLog to retrieve the tracked blocks for building proof CAR files.
+func (bs *blockstore) EnableReadTracking() {
+	bs.trackReads = true
+	bs.readLog = nil
+}
+
+// GetReadLog returns all blocks read since EnableReadTracking was called.
+func (bs *blockstore) GetReadLog() []blocks.Block {
+	return bs.readLog
+}
+
 // Get retrieves a block by its CID.
 func (bs *blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) {
 	var val []byte
@@ -91,7 +108,17 @@ func (bs *blockstore) Get(ctx context.Context, c cid.Cid) (blocks.Block, error) 
 		return nil, fmt.Errorf("block not found: %s", c.String())
 	}
 
-	return blocks.NewBlockWithCid(val, c)
+	blk, err := blocks.NewBlockWithCid(val, c)
+	if err != nil {
+		return nil, err
+	}
+
+	// track reads for proof CAR file generation
+	if bs.trackReads {
+		bs.readLog = append(bs.readLog, blk)
+	}
+
+	return blk, nil
 }
 
 // Has returns whether the blockstore contains a block with the given CID.

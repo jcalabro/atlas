@@ -955,6 +955,256 @@ func TestGetBlocksIntegration(t *testing.T) {
 	})
 }
 
+func TestHandleSyncGetRecord(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	router := srv.router()
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	t.Run("success - returns CAR with record proof", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:syncgetrecord1", "syncgetrecord1@example.com", "syncgetrecord1.dev.atlaspds.dev")
+
+		// create a record
+		tid, err := srv.db.NextTID(ctx, actor.Did)
+		require.NoError(t, err)
+		rkey := tid.String()
+
+		input := map[string]any{
+			"repo":       actor.Did,
+			"collection": "app.bsky.feed.post",
+			"rkey":       rkey,
+			"record": map[string]any{
+				"$type":     "app.bsky.feed.post",
+				"text":      "Test post for sync.getRecord",
+				"createdAt": time.Now().Format(time.RFC3339),
+			},
+		}
+
+		body, err := json.Marshal(input)
+		require.NoError(t, err)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+		req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+		srv.handleCreateRecord(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var createOut atproto.RepoCreateRecord_Output
+		err = json.Unmarshal(w.Body.Bytes(), &createOut)
+		require.NoError(t, err)
+		recordCID := createOut.Cid
+
+		// reload actor to get current head
+		actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+		require.NoError(t, err)
+
+		// call sync.getRecord
+		w = httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRecord?did=%s&collection=%s&rkey=%s", actor.Did, "app.bsky.feed.post", rkey)
+		req = httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/vnd.ipld.car", w.Header().Get("Content-Type"))
+
+		// verify it's a valid CAR file
+		carReader, err := car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+		require.NoError(t, err)
+		require.Len(t, carReader.Header.Roots, 1)
+		require.Equal(t, actor.Head, carReader.Header.Roots[0].String())
+
+		// collect all block CIDs from the CAR
+		carCIDs := make(map[string]bool)
+		for {
+			blk, err := carReader.Next()
+			if err != nil {
+				break
+			}
+			carCIDs[blk.Cid().String()] = true
+		}
+
+		// CAR should contain the record block
+		require.True(t, carCIDs[recordCID], "CAR should contain the record block")
+
+		// CAR should contain multiple blocks (commit, MST nodes, record)
+		require.GreaterOrEqual(t, len(carCIDs), 3, "CAR should have commit, MST nodes, and record")
+	})
+
+	t.Run("success - different collection types", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:syncgetrecord2", "syncgetrecord2@example.com", "syncgetrecord2.dev.atlaspds.dev")
+
+		// create records in different collections
+		collections := []string{"app.bsky.feed.post", "app.bsky.feed.like", "app.bsky.graph.follow"}
+		recordKeys := make(map[string]string) // collection -> rkey
+
+		for _, collection := range collections {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+			rkey := tid.String()
+			recordKeys[collection] = rkey
+
+			record := map[string]any{
+				"$type":     collection,
+				"createdAt": time.Now().Format(time.RFC3339),
+			}
+
+			// add collection-specific fields
+			switch collection {
+			case "app.bsky.feed.post":
+				record["text"] = "test post"
+			case "app.bsky.feed.like":
+				record["subject"] = map[string]any{
+					"uri": "at://did:plc:test/app.bsky.feed.post/abc",
+					"cid": "bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee",
+				}
+			case "app.bsky.graph.follow":
+				record["subject"] = "did:plc:followed"
+			}
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": collection,
+				"rkey":       rkey,
+				"record":     record,
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			// reload actor to get current head before each create
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+		}
+
+		// verify we can get each record
+		for _, collection := range collections {
+			rkey := recordKeys[collection]
+
+			w := httptest.NewRecorder()
+			url := fmt.Sprintf("/xrpc/com.atproto.sync.getRecord?did=%s&collection=%s&rkey=%s", actor.Did, collection, rkey)
+			req := httptest.NewRequest(http.MethodGet, url, nil)
+			req = addTestHostContext(srv, req)
+			router.ServeHTTP(w, req)
+
+			require.Equal(t, http.StatusOK, w.Code, "should get record from collection %s", collection)
+			require.Equal(t, "application/vnd.ipld.car", w.Header().Get("Content-Type"))
+
+			// verify it's a valid CAR
+			carReader, err := car.NewCarReader(bytes.NewReader(w.Body.Bytes()))
+			require.NoError(t, err)
+			require.Len(t, carReader.Header.Roots, 1)
+		}
+	})
+
+	t.Run("error - missing did parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRecord?collection=app.bsky.feed.post&rkey=abc", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - missing collection parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRecord?did=did:plc:test&rkey=abc", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - missing rkey parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRecord?did=did:plc:test&collection=app.bsky.feed.post", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid did format", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRecord?did=not-a-did&collection=app.bsky.feed.post&rkey=abc", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid collection nsid", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:syncgetrecord3", "syncgetrecord3@example.com", "syncgetrecord3.dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRecord?did=%s&collection=not-a-nsid&rkey=abc", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid rkey", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:syncgetrecord4", "syncgetrecord4@example.com", "syncgetrecord4.dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRecord?did=%s&collection=app.bsky.feed.post&rkey=invalid/rkey", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - repo not found", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.sync.getRecord?did=did:plc:nonexistent&collection=app.bsky.feed.post&rkey=abc", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("error - record not found", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:syncgetrecord5", "syncgetrecord5@example.com", "syncgetrecord5.dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.sync.getRecord?did=%s&collection=app.bsky.feed.post&rkey=nonexistent", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
 // TestGetBlocksCIDValidation tests CID parsing edge cases
 func TestGetBlocksCIDValidation(t *testing.T) {
 	t.Parallel()

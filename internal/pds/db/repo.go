@@ -21,6 +21,7 @@ import (
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/multiformats/go-multihash"
 	"go.opentelemetry.io/otel/attribute"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -943,6 +944,91 @@ func (db *DB) ApplyWrites(
 			CommitCID: commitCID,
 			Rev:       newCommit.Rev,
 			Results:   results,
+		}, nil
+	})
+
+	return
+}
+
+// RecordProof contains the proof blocks needed to verify a record exists in a repo.
+type RecordProof struct {
+	RootCID cid.Cid
+	Blocks  []blocks.Block
+}
+
+// GetRecordProof retrieves a record and all the MST proof blocks needed to verify it.
+// Returns the root CID and the blocks that form the proof path from root to record.
+func (db *DB) GetRecordProof(
+	ctx context.Context,
+	did string,
+	collection string,
+	rkey string,
+) (proof *RecordProof, err error) {
+	_, span, done := db.observe(ctx, "GetRecordProof")
+	defer func() { done(err) }()
+
+	span.SetAttributes(
+		attribute.String("did", did),
+		attribute.String("collection", collection),
+		attribute.String("rkey", rkey),
+	)
+
+	proof, err = readTransaction(db.db, func(tx fdb.ReadTransaction) (*RecordProof, error) {
+		// get the actor to find the current head
+		actorKey := pack(db.actors.actors, did)
+		actorBuf, err := tx.Get(actorKey).Get()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get actor: %w", err)
+		}
+		if len(actorBuf) == 0 {
+			return nil, ErrNotFound
+		}
+
+		var actor types.Actor
+		if err := proto.Unmarshal(actorBuf, &actor); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal actor: %w", err)
+		}
+
+		rootCID, err := cid.Decode(actor.Head)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse repo head CID: %w", err)
+		}
+
+		// create a read blockstore with read tracking enabled
+		bs := db.newReadBlockstore(did, tx)
+		bs.EnableReadTracking()
+
+		// load the commit (this will be tracked)
+		commit, _, err := loadCommit(ctx, bs, rootCID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load commit: %w", err)
+		}
+
+		// load the MST from the commit's data CID
+		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load MST: %w", err)
+		}
+
+		// get the record - this traverses the MST and reads all proof blocks
+		rpath := []byte(collection + "/" + rkey)
+		recordCID, err := tree.Get(rpath)
+		if err != nil {
+			return nil, fmt.Errorf("record not found: %w", err)
+		}
+		if recordCID == nil {
+			return nil, ErrNotFound
+		}
+
+		// also read the record block itself
+		_, err = bs.Get(ctx, *recordCID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get record block: %w", err)
+		}
+
+		return &RecordProof{
+			RootCID: rootCID,
+			Blocks:  bs.GetReadLog(),
 		}, nil
 	})
 

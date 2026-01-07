@@ -180,6 +180,83 @@ func (s *server) handleGetRepoStatus(w http.ResponseWriter, r *http.Request) {
 	s.jsonOK(w, out)
 }
 
+func (s *server) handleSyncGetRecord(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	span := spanFromContext(ctx)
+	defer span.End()
+
+	did := r.URL.Query().Get("did")
+	collection := r.URL.Query().Get("collection")
+	rkey := r.URL.Query().Get("rkey")
+
+	switch {
+	case did == "":
+		s.badRequest(w, fmt.Errorf("did is required"))
+		return
+	case collection == "":
+		s.badRequest(w, fmt.Errorf("collection is required"))
+		return
+	case rkey == "":
+		s.badRequest(w, fmt.Errorf("rkey is required"))
+		return
+	}
+
+	if _, err := syntax.ParseDID(did); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid did: %w", err))
+		return
+	}
+
+	if _, err := syntax.ParseNSID(collection); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid collection nsid: %w", err))
+		return
+	}
+
+	if _, err := syntax.ParseRecordKey(rkey); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid rkey: %w", err))
+		return
+	}
+
+	proof, err := s.db.GetRecordProof(ctx, did, collection, rkey)
+	if errors.Is(err, db.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("record not found"))
+		return
+	}
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get record proof: %w", err))
+		return
+	}
+
+	// build CAR response
+	buf := new(bytes.Buffer)
+
+	hb, err := cbor.DumpObject(&car.CarHeader{
+		Roots:   []cid.Cid{proof.RootCID},
+		Version: 1,
+	})
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to encode car header: %w", err))
+		return
+	}
+
+	if err := carutil.LdWrite(buf, hb); err != nil {
+		s.internalErr(w, fmt.Errorf("failed to write car header: %w", err))
+		return
+	}
+
+	for _, blk := range proof.Blocks {
+		if err := carutil.LdWrite(buf, blk.Cid().Bytes(), blk.RawData()); err != nil {
+			s.internalErr(w, fmt.Errorf("failed to write block to car: %w", err))
+			return
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/vnd.ipld.car")
+	w.WriteHeader(http.StatusOK)
+	if _, err := buf.WriteTo(w); err != nil {
+		s.log.Error("failed to write car response", "err", err)
+	}
+}
+
 func (s *server) handleGetRepo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	span := spanFromContext(ctx)

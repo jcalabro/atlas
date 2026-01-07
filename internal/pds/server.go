@@ -362,6 +362,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.listBlobs", s.handleListBlobs)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getBlob", s.handleGetBlob)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getBlocks", s.handleGetBlocks)
+	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRecord", s.handleSyncGetRecord)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getLatestCommit", s.handleGetLatestCommit)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepoStatus", s.handleGetRepoStatus)
 	mux.HandleFunc("GET /xrpc/com.atproto.sync.getRepo", s.handleGetRepo)
