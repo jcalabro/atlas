@@ -2,37 +2,37 @@ package pds
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/lex/util"
 	"github.com/ipfs/go-cid"
 	"github.com/jcalabro/atlas/internal/pds/db"
 	"github.com/jcalabro/atlas/internal/types"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/multiformats/go-multihash"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // blobstore wraps an S3-compatible client for blob storage
 type blobstore struct {
-	client *minio.Client
+	client *s3.Client
 	bucket string
 }
 
 func newBlobstore(cfg *BlobstoreConfig) (*blobstore, error) {
-	client, err := minio.New(cfg.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
-		Secure: false, // use HTTP for local dev
-		Region: cfg.Region,
+	client := s3.New(s3.Options{
+		BaseEndpoint: aws.String(fmt.Sprintf("http://%s", cfg.Endpoint)),
+		Region:       cfg.Region,
+		Credentials:  credentials.NewStaticCredentialsProvider(cfg.AccessKey, cfg.SecretKey, ""),
+		UsePathStyle: true, // required for S3-compatible services like Garage
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create minio client: %w", err)
-	}
 
 	return &blobstore{
 		client: client,
@@ -87,8 +87,11 @@ func (s *server) handleUploadBlob(w http.ResponseWriter, r *http.Request) {
 
 	// upload to S3
 	key := blobKey(actor.Did, blobCID)
-	_, err = s.blobstore.client.PutObject(ctx, s.blobstore.bucket, key, bytes.NewReader(data), int64(len(data)), minio.PutObjectOptions{
-		ContentType: mimeType,
+	_, err = s.blobstore.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(s.blobstore.bucket),
+		Key:         aws.String(key),
+		Body:        bytes.NewReader(data),
+		ContentType: aws.String(mimeType),
 	})
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to upload blob to S3: %w", err))
@@ -201,13 +204,16 @@ func (s *server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 
 	// fetch from S3
 	key := blobKey(did, blobCID)
-	obj, err := s.blobstore.client.GetObject(ctx, s.blobstore.bucket, key, minio.GetObjectOptions{})
+	result, err := s.blobstore.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.blobstore.bucket),
+		Key:    aws.String(key),
+	})
 	if err != nil {
 		s.internalErr(w, fmt.Errorf("failed to get blob from S3: %w", err))
 		return
 	}
 	defer func() {
-		if err := obj.Close(); err != nil {
+		if err := result.Body.Close(); err != nil {
 			s.log.Error("failed to close blob object", "err", err)
 		}
 	}()
@@ -218,7 +224,18 @@ func (s *server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 
 	// stream the blob
-	if _, err := io.Copy(w, obj); err != nil {
+	if _, err := io.Copy(w, result.Body); err != nil {
 		s.log.Error("failed to stream blob", "err", err)
 	}
+}
+
+// bucketExists checks if the configured bucket exists (used for health checks and tests)
+func (bs *blobstore) bucketExists(ctx context.Context) (bool, error) {
+	_, err := bs.client.HeadBucket(ctx, &s3.HeadBucketInput{
+		Bucket: aws.String(bs.bucket),
+	})
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

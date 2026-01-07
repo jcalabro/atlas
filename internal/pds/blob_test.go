@@ -9,10 +9,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/ipfs/go-cid"
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/multiformats/go-multihash"
 	"github.com/stretchr/testify/require"
 )
@@ -28,26 +29,26 @@ const (
 func testBlobstore(t *testing.T) *blobstore {
 	t.Helper()
 
-	client, err := minio.New(testBlobstoreEndpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(testBlobstoreKeyID, testBlobstoreSecret, ""),
-		Secure: false,
-		Region: testBlobstoreRegion,
+	client := s3.New(s3.Options{
+		BaseEndpoint: aws.String(fmt.Sprintf("http://%s", testBlobstoreEndpoint)),
+		Region:       testBlobstoreRegion,
+		Credentials:  credentials.NewStaticCredentialsProvider(testBlobstoreKeyID, testBlobstoreSecret, ""),
+		UsePathStyle: true,
 	})
-	if err != nil {
-		t.Skipf("skipping blob test: failed to create minio client: %v", err)
+
+	bs := &blobstore{
+		client: client,
+		bucket: testBlobstoreBucket,
 	}
 
 	// check if bucket exists
 	ctx := t.Context()
-	exists, err := client.BucketExists(ctx, testBlobstoreBucket)
+	exists, err := bs.bucketExists(ctx)
 	if err != nil || !exists {
 		t.Skipf("skipping blob test: blobstore not available (bucket %q does not exist or error: %v)", testBlobstoreBucket, err)
 	}
 
-	return &blobstore{
-		client: client,
-		bucket: testBlobstoreBucket,
-	}
+	return bs
 }
 
 func testServerWithBlobstore(t *testing.T) *server {
