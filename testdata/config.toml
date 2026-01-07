@@ -6,6 +6,14 @@ contact_email = ""
 privacy_policy = ""
 terms_of_service = ""
 
+[hosts."local-pds.calabro.io"]
+service_did = "did:web:local-pds.calabro.io"
+jwt_signing_key = "./testdata/jwt-signing-key.pem"
+user_domains = [".local-pds.calabro.io"]
+contact_email = ""
+privacy_policy = ""
+terms_of_service = ""
+
 [hosts."localhost"]
 service_did = "did:web:localhost"
 jwt_signing_key = "./testdata/jwt-signing-key.pem"
