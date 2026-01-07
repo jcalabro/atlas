@@ -505,6 +505,190 @@ func (s *server) handlePutRecord(w http.ResponseWriter, r *http.Request) {
 	s.jsonOK(w, resp)
 }
 
+// applyWritesInput mirrors atproto.RepoApplyWrites_Input but with
+// a simpler structure for handling arbitrary records.
+type applyWritesInput struct {
+	Repo       string            `json:"repo"`
+	Validate   *bool             `json:"validate,omitempty"`
+	Writes     []applyWritesItem `json:"writes"`
+	SwapCommit *string           `json:"swapCommit,omitempty"`
+}
+
+type applyWritesItem struct {
+	Type       string          `json:"$type"`
+	Collection string          `json:"collection"`
+	Rkey       string          `json:"rkey"`
+	Value      json.RawMessage `json:"value,omitempty"`
+}
+
+func (s *server) handleApplyWrites(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	actor := actorFromContext(ctx)
+	if actor == nil {
+		s.internalErr(w, fmt.Errorf("actor not found in context"))
+		return
+	}
+
+	var in applyWritesInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid request body: %w", err))
+		return
+	}
+
+	// verify user is attempting to write to the repo they own
+	if in.Repo != actor.Did && in.Repo != actor.Handle {
+		s.forbidden(w, fmt.Errorf("forbidden"))
+		return
+	}
+
+	if len(in.Writes) == 0 {
+		s.badRequest(w, fmt.Errorf("writes is required"))
+		return
+	}
+
+	// convert input items to db.WriteOp
+	ops := make([]db.WriteOp, 0, len(in.Writes))
+	for i, item := range in.Writes {
+		// validate collection NSID
+		if _, err := syntax.ParseNSID(item.Collection); err != nil {
+			s.badRequest(w, fmt.Errorf("invalid collection nsid in write %d: %w", i, err))
+			return
+		}
+
+		// determine action from $type
+		var action string
+		switch item.Type {
+		case "com.atproto.repo.applyWrites#create":
+			action = "create"
+		case "com.atproto.repo.applyWrites#update":
+			action = "update"
+		case "com.atproto.repo.applyWrites#delete":
+			action = "delete"
+		default:
+			s.badRequest(w, fmt.Errorf("invalid write type in write %d: %s", i, item.Type))
+			return
+		}
+
+		var rkey string
+		if action == "create" && item.Rkey == "" {
+			// generate a TID-based rkey
+			tid, err := s.db.NextTID(ctx, actor.Did)
+			if err != nil {
+				s.internalErr(w, fmt.Errorf("failed to generate tid: %w", err))
+				return
+			}
+			rkey = tid.String()
+		} else {
+			if item.Rkey == "" {
+				s.badRequest(w, fmt.Errorf("rkey is required for %s in write %d", action, i))
+				return
+			}
+			// validate rkey
+			if _, err := syntax.ParseRecordKey(item.Rkey); err != nil {
+				s.badRequest(w, fmt.Errorf("invalid rkey in write %d: %w", i, err))
+				return
+			}
+			rkey = item.Rkey
+		}
+
+		op := db.WriteOp{
+			Action:     action,
+			Collection: item.Collection,
+			Rkey:       rkey,
+		}
+
+		// for create/update, parse and convert record to CBOR
+		if action != "delete" {
+			if len(item.Value) == 0 {
+				s.badRequest(w, fmt.Errorf("value is required for %s in write %d", action, i))
+				return
+			}
+
+			recordData, err := atdata.UnmarshalJSON(item.Value)
+			if err != nil {
+				s.badRequest(w, fmt.Errorf("invalid record data in write %d: %w", i, err))
+				return
+			}
+
+			// ensure record has $type field matching collection
+			if recordData["$type"] == nil || recordData["$type"] == "" {
+				recordData["$type"] = item.Collection
+			}
+
+			cborBytes, err := atdata.MarshalCBOR(recordData)
+			if err != nil {
+				s.internalErr(w, fmt.Errorf("failed to marshal record to CBOR in write %d: %w", i, err))
+				return
+			}
+
+			op.Value = cborBytes
+		}
+
+		ops = append(ops, op)
+	}
+
+	// check if any creates would conflict with existing records
+	for i, op := range ops {
+		if op.Action == "create" {
+			uri := at.FormatURI(actor.Did, op.Collection, op.Rkey)
+			existing, err := s.db.GetRecord(ctx, uri)
+			if err != nil && !errors.Is(err, db.ErrNotFound) {
+				s.internalErr(w, fmt.Errorf("failed to check existing record: %w", err))
+				return
+			}
+			if existing != nil {
+				s.conflict(w, fmt.Errorf("record %q already exists (write %d)", uri, i))
+				return
+			}
+		}
+	}
+
+	// apply all writes atomically
+	result, err := s.db.ApplyWrites(ctx, actor, ops, in.SwapCommit)
+	if err != nil {
+		if errors.Is(err, db.ErrConcurrentModification) {
+			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
+			return
+		}
+		s.internalErr(w, fmt.Errorf("failed to apply writes: %w", err))
+		return
+	}
+
+	// build response using indigo types
+	outputResults := make([]*atproto.RepoApplyWrites_Output_Results_Elem, 0, len(result.Results))
+	for _, res := range result.Results {
+		elem := &atproto.RepoApplyWrites_Output_Results_Elem{}
+		switch res.Action {
+		case "create":
+			elem.RepoApplyWrites_CreateResult = &atproto.RepoApplyWrites_CreateResult{
+				Uri:              res.URI,
+				Cid:              res.CID,
+				ValidationStatus: util.Ptr("valid"),
+			}
+		case "update":
+			elem.RepoApplyWrites_UpdateResult = &atproto.RepoApplyWrites_UpdateResult{
+				Uri:              res.URI,
+				Cid:              res.CID,
+				ValidationStatus: util.Ptr("valid"),
+			}
+		case "delete":
+			elem.RepoApplyWrites_DeleteResult = &atproto.RepoApplyWrites_DeleteResult{}
+		}
+		outputResults = append(outputResults, elem)
+	}
+
+	resp := atproto.RepoApplyWrites_Output{
+		Commit: &atproto.RepoDefs_CommitMeta{
+			Cid: result.CommitCID.String(),
+			Rev: result.Rev,
+		},
+		Results: outputResults,
+	}
+
+	s.jsonOK(w, resp)
+}
+
 func (s *server) handleDescribeRepo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	span := spanFromContext(ctx)

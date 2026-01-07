@@ -337,6 +337,7 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.createRecord", s.authMiddleware(s.handleCreateRecord))
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.putRecord", s.authMiddleware(s.handlePutRecord))
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.deleteRecord", s.authMiddleware(s.handleDeleteRecord))
+	mux.HandleFunc("POST /xrpc/com.atproto.repo.applyWrites", s.authMiddleware(s.handleApplyWrites))
 
 	mux.HandleFunc("GET /xrpc/com.atproto.server.describeServer", s.handleDescribeServer)
 	mux.HandleFunc("POST /xrpc/com.atproto.server.createAccount", s.handleCreateAccount)

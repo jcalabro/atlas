@@ -653,6 +653,302 @@ func (db *DB) DeleteRecord(
 	return
 }
 
+// WriteOp represents a single operation in an applyWrites batch
+type WriteOp struct {
+	Action     string // "create", "update", or "delete"
+	Collection string
+	Rkey       string
+	Value      []byte // CBOR-encoded record data (nil for delete)
+}
+
+// WriteOpResult contains the result of a single write operation
+type WriteOpResult struct {
+	Action      string
+	URI         string
+	CID         string // empty for delete
+	IsNewRecord bool   // true if this was a create (vs update)
+}
+
+// ApplyWritesResult contains the result of an atomic batch write
+type ApplyWritesResult struct {
+	CommitCID cid.Cid
+	Rev       string
+	Results   []WriteOpResult
+}
+
+// ApplyWrites atomically applies multiple write operations to a repo.
+// All MST operations, block writes, secondary index updates, and actor updates
+// happen within a single FDB write transaction.
+func (db *DB) ApplyWrites(
+	ctx context.Context,
+	actor *types.Actor,
+	ops []WriteOp,
+	swapCommit *string,
+) (result *ApplyWritesResult, err error) {
+	_, span, done := db.observe(ctx, "ApplyWrites")
+	defer func() { done(err) }()
+
+	span.SetAttributes(
+		attribute.String("did", actor.Did),
+		attribute.String("handle", actor.Handle),
+		attribute.Int("num_ops", len(ops)),
+		metrics.NilString("swap_commit", swapCommit),
+	)
+
+	result, err = transaction(db.db, func(tx fdb.Transaction) (*ApplyWritesResult, error) {
+		// check swapCommit - verify the current head hasn't been changed
+		existing, err := db.getActorByDIDTx(tx, actor.Did)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current head: %w", err)
+		}
+
+		if swapCommit != nil && existing.Head != *swapCommit {
+			return nil, ErrConcurrentModification
+		}
+
+		// verify head hasn't changed since we loaded the actor
+		if existing.Head != actor.Head {
+			return nil, ErrConcurrentModification
+		}
+
+		// load the existing commit to get the data CID and clock
+		headCID, err := cid.Decode(actor.Head)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse repo head CID: %w", err)
+		}
+
+		bs := db.newWriteBlockstore(actor.Did, tx)
+		commit, clk, err := loadCommit(ctx, bs, headCID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load commit: %w", err)
+		}
+
+		// compute new rev and set it on the blockstore
+		newRev := clk.Next().String()
+		bs.SetRev(newRev)
+
+		// enable write tracking for firehose event generation
+		bs.EnableWriteTracking()
+
+		// load the MST from the commit's data CID
+		tree, err := mst.LoadTreeFromStore(ctx, bs, commit.Data)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load MST: %w", err)
+		}
+
+		results := make([]WriteOpResult, 0, len(ops))
+		repoOps := make([]*types.RepoOp, 0, len(ops))
+
+		for _, op := range ops {
+			rpath := []byte(op.Collection + "/" + op.Rkey)
+			uri := "at://" + actor.Did + "/" + op.Collection + "/" + op.Rkey
+
+			switch op.Action {
+			case "create":
+				// store the record block and get its CID
+				recordCID, err := cidBuilder.Sum(op.Value)
+				if err != nil {
+					return nil, fmt.Errorf("failed to compute record CID: %w", err)
+				}
+
+				recordBlock, err := blocks.NewBlockWithCid(op.Value, recordCID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create record block: %w", err)
+				}
+
+				if err := bs.Put(ctx, recordBlock); err != nil {
+					return nil, fmt.Errorf("failed to store record block: %w", err)
+				}
+
+				// insert into MST
+				if _, err := tree.Insert(rpath, recordCID); err != nil {
+					return nil, fmt.Errorf("failed to insert record into MST: %w", err)
+				}
+
+				// save to secondary index
+				record := &types.Record{
+					Did:        actor.Did,
+					Collection: op.Collection,
+					Rkey:       op.Rkey,
+					Cid:        recordCID.String(),
+					Value:      op.Value,
+					CreatedAt:  timestamppb.Now(),
+				}
+				if err := db.saveRecordTx(tx, record); err != nil {
+					return nil, fmt.Errorf("failed to save record: %w", err)
+				}
+
+				db.incrementCollectionCountTx(tx, actor.Did, op.Collection)
+
+				results = append(results, WriteOpResult{
+					Action:      "create",
+					URI:         uri,
+					CID:         recordCID.String(),
+					IsNewRecord: true,
+				})
+				repoOps = append(repoOps, &types.RepoOp{
+					Action: "create",
+					Path:   string(rpath),
+					Cid:    recordCID.Bytes(),
+				})
+
+			case "update":
+				// store the record block and get its CID
+				recordCID, err := cidBuilder.Sum(op.Value)
+				if err != nil {
+					return nil, fmt.Errorf("failed to compute record CID: %w", err)
+				}
+
+				recordBlock, err := blocks.NewBlockWithCid(op.Value, recordCID)
+				if err != nil {
+					return nil, fmt.Errorf("failed to create record block: %w", err)
+				}
+
+				if err := bs.Put(ctx, recordBlock); err != nil {
+					return nil, fmt.Errorf("failed to store record block: %w", err)
+				}
+
+				// check if record exists
+				existingCID, err := tree.Get(rpath)
+				isNewRecord := err != nil || existingCID == nil
+
+				// remove old record if it exists
+				if !isNewRecord {
+					if _, err := tree.Remove(rpath); err != nil {
+						return nil, fmt.Errorf("failed to remove old record from MST: %w", err)
+					}
+				}
+
+				// insert new record
+				if _, err := tree.Insert(rpath, recordCID); err != nil {
+					return nil, fmt.Errorf("failed to insert record into MST: %w", err)
+				}
+
+				// save to secondary index
+				record := &types.Record{
+					Did:        actor.Did,
+					Collection: op.Collection,
+					Rkey:       op.Rkey,
+					Cid:        recordCID.String(),
+					Value:      op.Value,
+					CreatedAt:  timestamppb.Now(),
+				}
+				if err := db.saveRecordTx(tx, record); err != nil {
+					return nil, fmt.Errorf("failed to save record: %w", err)
+				}
+
+				if isNewRecord {
+					db.incrementCollectionCountTx(tx, actor.Did, op.Collection)
+				}
+
+				action := "update"
+				if isNewRecord {
+					action = "create"
+				}
+				results = append(results, WriteOpResult{
+					Action:      action,
+					URI:         uri,
+					CID:         recordCID.String(),
+					IsNewRecord: isNewRecord,
+				})
+				repoOps = append(repoOps, &types.RepoOp{
+					Action: action,
+					Path:   string(rpath),
+					Cid:    recordCID.Bytes(),
+				})
+
+			case "delete":
+				// remove from MST
+				if _, err := tree.Remove(rpath); err != nil {
+					return nil, fmt.Errorf("failed to remove record from MST: %w", err)
+				}
+
+				// delete from secondary index
+				aturi := &at.URI{Repo: actor.Did, Collection: op.Collection, Rkey: op.Rkey}
+				db.DeleteRecordTx(tx, aturi)
+
+				db.decrementCollectionCountTx(tx, actor.Did, op.Collection)
+
+				results = append(results, WriteOpResult{
+					Action: "delete",
+					URI:    uri,
+				})
+				repoOps = append(repoOps, &types.RepoOp{
+					Action: "delete",
+					Path:   string(rpath),
+				})
+
+			default:
+				return nil, fmt.Errorf("unknown action: %s", op.Action)
+			}
+		}
+
+		// write dirty MST blocks and get new root CID
+		rootCID, err := tree.WriteDiffBlocks(ctx, bs)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write MST blocks: %w", err)
+		}
+
+		// create and sign new commit
+		newCommit := repo.Commit{
+			DID:     actor.Did,
+			Version: repo.ATPROTO_REPO_VERSION,
+			Prev:    &headCID,
+			Data:    *rootCID,
+			Rev:     newRev,
+		}
+
+		privkey, err := atcrypto.ParsePrivateBytesK256(actor.SigningKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse signing key: %w", err)
+		}
+		if err := newCommit.Sign(privkey); err != nil {
+			return nil, fmt.Errorf("failed to sign commit: %w", err)
+		}
+
+		// store the commit block
+		commitCID, err := storeCommit(ctx, bs, &newCommit)
+		if err != nil {
+			return nil, fmt.Errorf("failed to store commit: %w", err)
+		}
+
+		// update actor with new head and rev
+		actor.Head = commitCID.String()
+		actor.Rev = newCommit.Rev
+		if err := db.saveActorTx(tx, actor); err != nil {
+			return nil, fmt.Errorf("failed to save actor: %w", err)
+		}
+
+		// build and write firehose event
+		carBytes, err := buildCarFile(commitCID, bs.GetWriteLog())
+		if err != nil {
+			return nil, fmt.Errorf("failed to build CAR file: %w", err)
+		}
+
+		event := &types.RepoEvent{
+			PdsHost: actor.PdsHost,
+			Repo:    actor.Did,
+			Rev:     newRev,
+			Since:   commit.Rev,
+			Commit:  commitCID.Bytes(),
+			Blocks:  carBytes,
+			Ops:     repoOps,
+			Time:    timestamppb.New(time.Now()),
+		}
+		if err := db.WriteEventTx(tx, event); err != nil {
+			return nil, fmt.Errorf("failed to write firehose event: %w", err)
+		}
+
+		return &ApplyWritesResult{
+			CommitCID: commitCID,
+			Rev:       newCommit.Rev,
+			Results:   results,
+		}, nil
+	})
+
+	return
+}
+
 // loadCommit loads a commit from the blockstore and returns it along with a TID clock
 // initialized from the commit's rev.
 func loadCommit(ctx context.Context, bs *blockstore, commitCID cid.Cid) (*repo.Commit, *syntax.TIDClock, error) {
