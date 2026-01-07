@@ -614,6 +614,38 @@ func TestHandleGetRecord(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 
+	t.Run("proxies directly to appview when atproto-proxy header is present", func(t *testing.T) {
+		t.Parallel()
+
+		// set up a mock appview that returns a record
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, "/xrpc/com.atproto.repo.getRecord", r.URL.Path)
+			require.Equal(t, "did:plc:notlocal123", r.URL.Query().Get("repo"))
+			require.Equal(t, "app.bsky.feed.post", r.URL.Query().Get("collection"))
+			require.Equal(t, "3jui7kd2proxy", r.URL.Query().Get("rkey"))
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"uri":"at://did:plc:notlocal123/app.bsky.feed.post/3jui7kd2proxy","cid":"bafyreihx6qqvghcmvpqq33kg4s7ztnh6mlt5cqpynjjxgcoynvndx5cuee","value":{"$type":"app.bsky.feed.post","text":"proxied record"}}`)) // nolint:errcheck
+		}))
+		t.Cleanup(backend.Close)
+
+		// create a server with appview proxy configured
+		srvWithProxy := testServer(t)
+		srvWithProxy.appviewProxy = newAppviewProxy(srvWithProxy.log, []string{backend.URL})
+		t.Cleanup(srvWithProxy.appviewProxy.CloseIdleConnections)
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.getRecord?repo=did:plc:notlocal123&collection=app.bsky.feed.post&rkey=3jui7kd2proxy", nil)
+		req.Header.Set("atproto-proxy", "did:web:api.bsky.app#bsky_appview")
+		req = addTestHostContext(srvWithProxy, req)
+
+		srvWithProxy.handleGetRecord(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Contains(t, w.Body.String(), "proxied record")
+	})
+
 	t.Run("error - wrong cid parameter", func(t *testing.T) {
 		t.Parallel()
 		w := httptest.NewRecorder()

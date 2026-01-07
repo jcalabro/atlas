@@ -79,6 +79,12 @@ func (s *server) handleGetRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// if atproto-proxy header is present, go straight to the proxy
+	if r.Header.Get("atproto-proxy") != "" && s.appviewProxy != nil {
+		s.handleProxy(w, r)
+		return
+	}
+
 	// resolve repo to DID if it's a handle
 	did := repo
 	if _, err := syntax.ParseDID(repo); err != nil {
