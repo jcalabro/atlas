@@ -54,6 +54,7 @@ We say it's high availability because the system is designed to be run with mult
 ## Key Patterns
 
 - **Observability**: All components use structured logging (slog), OpenTelemetry tracing, and Prometheus metrics
+    - We should only log on true programmer error or system failure, or very rare and important events. We should only log at debug level on invalid user input
 - **Signal handling**: Graceful shutdown on SIGINT/SIGTERM to allow in-progress queries to finish
 - **Error handling**: Wrapped errors with context via `fmt.Errorf`. Errors must be handled properly and robustly. Never use `panic`.
 - **Testing**: The code that we write should be well tested

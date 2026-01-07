@@ -1,7 +1,6 @@
 package pds
 
 import (
-	"bytes"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -14,13 +13,8 @@ import (
 func TestObservabilityMiddleware(t *testing.T) {
 	t.Parallel()
 
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-
 	s := &server{
-		log:    logger,
+		log:    slog.Default(),
 		tracer: noop.NewTracerProvider().Tracer("test"),
 	}
 
@@ -36,42 +30,15 @@ func TestObservabilityMiddleware(t *testing.T) {
 
 	handler.ServeHTTP(rw, req)
 
-	if rw.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rw.Code)
-	}
-
-	logs := logBuf.String()
-	if logs == "" {
-		t.Error("expected debug logs, got none")
-	}
-
-	if !contains(logs, "incoming request") {
-		t.Error("expected 'incoming request' log")
-	}
-
-	if !contains(logs, "request completed") {
-		t.Error("expected 'request completed' log")
-	}
-
-	if !contains(logs, "GET") {
-		t.Error("expected method in logs")
-	}
-
-	if !contains(logs, "/test") {
-		t.Error("expected path in logs")
-	}
+	require.Equal(t, http.StatusOK, rw.Code)
+	require.Equal(t, "test response", rw.Body.String())
 }
 
 func TestObservabilityMiddlewareErrorStatus(t *testing.T) {
 	t.Parallel()
 
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-
 	s := &server{
-		log:    logger,
+		log:    slog.Default(),
 		tracer: noop.NewTracerProvider().Tracer("test"),
 	}
 
@@ -86,34 +53,21 @@ func TestObservabilityMiddlewareErrorStatus(t *testing.T) {
 
 	handler.ServeHTTP(rw, req)
 
-	if rw.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rw.Code)
-	}
-
-	logs := logBuf.String()
-	if !contains(logs, "500") {
-		t.Error("expected status code in logs")
-	}
+	require.Equal(t, http.StatusInternalServerError, rw.Code)
+	require.Equal(t, "error", rw.Body.String())
 }
 
 func TestSpanFromContext(t *testing.T) {
 	t.Parallel()
 
-	var logBuf bytes.Buffer
-	logger := slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{
-		Level: slog.LevelDebug,
-	}))
-
 	s := &server{
-		log:    logger,
+		log:    slog.Default(),
 		tracer: noop.NewTracerProvider().Tracer("test"),
 	}
 
 	handler := s.observabilityMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		span := spanFromContext(r.Context())
-		if span == nil {
-			t.Error("expected span from context, got nil")
-		}
+		require.NotNil(t, span, "expected span from context")
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -121,8 +75,4 @@ func TestSpanFromContext(t *testing.T) {
 	rw := httptest.NewRecorder()
 
 	handler.ServeHTTP(rw, req)
-}
-
-func contains(s, substr string) bool {
-	return bytes.Contains([]byte(s), []byte(substr))
 }

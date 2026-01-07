@@ -73,6 +73,15 @@ var (
 		[]string{"pds_host"},
 	)
 
+	FirehoseEventsWritten = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name:      "firehose_events_written",
+			Namespace: namespace,
+			Help:      "Total number of events written to subscriber websockets",
+		},
+		[]string{"pds_host", "event_type"},
+	)
+
 	// Blob storage metrics
 	BlobUploads = promauto.NewCounterVec(
 		prometheus.CounterOpts{

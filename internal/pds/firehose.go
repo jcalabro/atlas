@@ -339,12 +339,14 @@ func (f *firehose) sendEvent(sub *subscriber, event *types.RepoEvent) error {
 		return fmt.Errorf("failed to encode event: %w", err)
 	}
 
-	f.log.Info("sending event to subscriber", "sub_id", sub.id, "seq", event.Seq, "type", msgType, "repo", event.Repo)
-
 	sub.connMu.Lock()
 	defer sub.connMu.Unlock()
 	sub.conn.SetWriteDeadline(time.Now().Add(writeTimeout)) //nolint:errcheck
-	return sub.conn.WriteMessage(websocket.BinaryMessage, msg)
+	if err := sub.conn.WriteMessage(websocket.BinaryMessage, msg); err != nil {
+		return err
+	}
+	pdsmetrics.FirehoseEventsWritten.WithLabelValues(sub.pdsHost, msgType).Inc()
+	return nil
 }
 
 // encodeIdentityEvent converts a RepoEvent (identity type) to the ATProto CBOR wire format

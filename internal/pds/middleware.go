@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -116,13 +115,6 @@ func (s *server) observabilityMiddleware(next http.Handler) http.Handler {
 			attribute.String("http.user_agent", r.UserAgent()),
 		)
 
-		s.log.Debug("incoming request",
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.String("remote_addr", r.RemoteAddr),
-			slog.String("user_agent", r.UserAgent()),
-		)
-
 		start := time.Now()
 		next.ServeHTTP(rw, r.WithContext(ctx))
 		duration := time.Since(start).Seconds()
@@ -143,14 +135,7 @@ func (s *server) observabilityMiddleware(next http.Handler) http.Handler {
 		metrics.Requests.WithLabelValues(env.Version, serviceName, r.Host, r.URL.Path, r.Method, status).Inc()
 		metrics.RequestDuration.WithLabelValues(serviceName, r.Host, r.URL.Path, r.Method, status).Observe(duration)
 
-		s.log.Debug("request completed",
-			slog.String("host", r.Host),
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.Int("status", rw.status),
-			slog.Int("response_size", rw.size),
-			slog.Float64("duration_seconds", duration),
-		)
+		s.log.Debug("request", "method", r.Method, "path", r.URL.Path, "status", rw.status, "duration", duration)
 	})
 }
 
