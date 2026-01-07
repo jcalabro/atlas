@@ -12,6 +12,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/jcalabro/atlas/internal/at"
 	"github.com/jcalabro/atlas/internal/pds/db"
+	"github.com/jcalabro/atlas/internal/pds/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
 	"go.opentelemetry.io/otel/attribute"
@@ -194,6 +195,15 @@ type createRecordInput struct {
 func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// metric tracking: empty collection means don't record (validation errors)
+	var metricCollection string
+	metricStatus := "error"
+	defer func() {
+		if metricCollection != "" {
+			metrics.RecordOperations.WithLabelValues("create", metricCollection, metricStatus).Inc()
+		}
+	}()
+
 	actor := actorFromContext(ctx)
 	if actor == nil {
 		s.internalErr(w, fmt.Errorf("actor not found in context"))
@@ -217,6 +227,9 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		s.badRequest(w, fmt.Errorf("invalid collection nsid: %w", err))
 		return
 	}
+
+	// past validation - start recording metrics
+	metricCollection = in.Collection
 
 	// parse or generate rkey
 	var rkey string
@@ -245,6 +258,7 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing != nil {
+		metricStatus = "conflict"
 		s.conflict(w, fmt.Errorf("record %q already exists", uri))
 		return
 	}
@@ -280,12 +294,15 @@ func (s *server) handleCreateRecord(w http.ResponseWriter, r *http.Request) {
 	result, err := s.db.CreateRecord(ctx, actor, record, cborBytes, in.SwapCommit)
 	if err != nil {
 		if errors.Is(err, db.ErrConcurrentModification) {
+			metricStatus = "conflict"
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}
 		s.internalErr(w, fmt.Errorf("failed to create record: %w", err))
 		return
 	}
+
+	metricStatus = "success"
 
 	resp := atproto.RepoCreateRecord_Output{
 		Uri:              uri,
@@ -301,6 +318,15 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	span := spanFromContext(ctx)
 	defer span.End()
+
+	// metric tracking: empty collection means don't record (validation errors)
+	var metricCollection string
+	metricStatus := "error"
+	defer func() {
+		if metricCollection != "" {
+			metrics.RecordOperations.WithLabelValues("delete", metricCollection, metricStatus).Inc()
+		}
+	}()
 
 	actor := actorFromContext(ctx)
 	if actor == nil {
@@ -344,11 +370,15 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// past validation - start recording metrics
+	metricCollection = in.Collection
+
 	uri := at.FormatURI(actor.Did, in.Collection, in.Rkey)
 
 	// check if record exists
 	existing, err := s.db.GetRecord(ctx, uri)
 	if errors.Is(err, db.ErrNotFound) {
+		metricStatus = "not_found"
 		s.notFound(w, fmt.Errorf("record not found"))
 		return
 	}
@@ -364,6 +394,7 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if existing.Cid != *in.SwapRecord {
+			metricStatus = "conflict"
 			s.conflict(w, fmt.Errorf("record cid does not match swapRecord"))
 			return
 		}
@@ -376,12 +407,15 @@ func (s *server) handleDeleteRecord(w http.ResponseWriter, r *http.Request) {
 	result, err := s.db.DeleteRecord(ctx, actor, aturi, in.SwapCommit)
 	if err != nil {
 		if errors.Is(err, db.ErrConcurrentModification) {
+			metricStatus = "conflict"
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}
 		s.internalErr(w, fmt.Errorf("failed to delete record: %w", err))
 		return
 	}
+
+	metricStatus = "success"
 
 	s.jsonOK(w, &atproto.RepoDeleteRecord_Output{
 		Commit: &atproto.RepoDefs_CommitMeta{Cid: result.CommitCID.String(), Rev: result.Rev},
@@ -402,6 +436,15 @@ type putRecordInput struct {
 
 func (s *server) handlePutRecord(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	// metric tracking: empty collection means don't record (validation errors)
+	var metricCollection string
+	metricStatus := "error"
+	defer func() {
+		if metricCollection != "" {
+			metrics.RecordOperations.WithLabelValues("update", metricCollection, metricStatus).Inc()
+		}
+	}()
 
 	actor := actorFromContext(ctx)
 	if actor == nil {
@@ -447,6 +490,9 @@ func (s *server) handlePutRecord(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// past validation - start recording metrics
+	metricCollection = in.Collection
+
 	// validate swapRecord CID if provided
 	if in.SwapRecord != nil {
 		if _, err := syntax.ParseCID(*in.SwapRecord); err != nil {
@@ -488,12 +534,15 @@ func (s *server) handlePutRecord(w http.ResponseWriter, r *http.Request) {
 	result, err := s.db.PutRecord(ctx, actor, record, cborBytes, in.SwapRecord, in.SwapCommit)
 	if err != nil {
 		if errors.Is(err, db.ErrConcurrentModification) {
+			metricStatus = "conflict"
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}
 		s.internalErr(w, fmt.Errorf("failed to put record: %w", err))
 		return
 	}
+
+	metricStatus = "success"
 
 	resp := atproto.RepoPutRecord_Output{
 		Uri:              uri,
@@ -524,6 +573,15 @@ type applyWritesItem struct {
 func (s *server) handleApplyWrites(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// metric tracking: recordMetric indicates whether to record (after validation)
+	recordMetric := false
+	metricStatus := "error"
+	defer func() {
+		if recordMetric {
+			metrics.RecordOperations.WithLabelValues("apply_writes", "batch", metricStatus).Inc()
+		}
+	}()
+
 	actor := actorFromContext(ctx)
 	if actor == nil {
 		s.internalErr(w, fmt.Errorf("actor not found in context"))
@@ -546,6 +604,9 @@ func (s *server) handleApplyWrites(w http.ResponseWriter, r *http.Request) {
 		s.badRequest(w, fmt.Errorf("writes is required"))
 		return
 	}
+
+	// past basic validation - start recording metrics
+	recordMetric = true
 
 	// convert input items to db.WriteOp
 	ops := make([]db.WriteOp, 0, len(in.Writes))
@@ -638,6 +699,7 @@ func (s *server) handleApplyWrites(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if existing != nil {
+				metricStatus = "conflict"
 				s.conflict(w, fmt.Errorf("record %q already exists (write %d)", uri, i))
 				return
 			}
@@ -648,12 +710,15 @@ func (s *server) handleApplyWrites(w http.ResponseWriter, r *http.Request) {
 	result, err := s.db.ApplyWrites(ctx, actor, ops, in.SwapCommit)
 	if err != nil {
 		if errors.Is(err, db.ErrConcurrentModification) {
+			metricStatus = "conflict"
 			s.conflict(w, fmt.Errorf("repo was modified concurrently, please retry"))
 			return
 		}
 		s.internalErr(w, fmt.Errorf("failed to apply writes: %w", err))
 		return
 	}
+
+	metricStatus = "success"
 
 	// build response using indigo types
 	outputResults := make([]*atproto.RepoApplyWrites_Output_Results_Elem, 0, len(result.Results))

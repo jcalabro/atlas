@@ -15,6 +15,7 @@ import (
 	"github.com/bluesky-social/indigo/lex/util"
 	"github.com/ipfs/go-cid"
 	"github.com/jcalabro/atlas/internal/pds/db"
+	"github.com/jcalabro/atlas/internal/pds/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/multiformats/go-multihash"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -107,9 +108,14 @@ func (s *server) handleUploadBlob(w http.ResponseWriter, r *http.Request) {
 		CreatedAt: timestamppb.Now(),
 	}
 	if err := s.db.SaveBlob(ctx, blob); err != nil {
+		metrics.BlobUploads.WithLabelValues("error").Inc()
 		s.internalErr(w, fmt.Errorf("failed to save blob metadata: %w", err))
 		return
 	}
+
+	// record successful upload metrics
+	metrics.BlobUploads.WithLabelValues("success").Inc()
+	metrics.BlobUploadBytes.Add(float64(len(data)))
 
 	// return the blob reference
 	resp := atproto.RepoUploadBlob_Output{
@@ -194,10 +200,12 @@ func (s *server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 	// verify blob exists in our database
 	blob, err := s.db.GetBlob(ctx, did, blobCID.Bytes())
 	if errors.Is(err, db.ErrNotFound) {
+		metrics.BlobDownloads.WithLabelValues("not_found").Inc()
 		s.notFound(w, fmt.Errorf("blob not found"))
 		return
 	}
 	if err != nil {
+		metrics.BlobDownloads.WithLabelValues("error").Inc()
 		s.internalErr(w, fmt.Errorf("failed to get blob metadata: %w", err))
 		return
 	}
@@ -209,6 +217,7 @@ func (s *server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 		Key:    aws.String(key),
 	})
 	if err != nil {
+		metrics.BlobDownloads.WithLabelValues("error").Inc()
 		s.internalErr(w, fmt.Errorf("failed to get blob from S3: %w", err))
 		return
 	}
@@ -217,6 +226,10 @@ func (s *server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 			s.log.Error("failed to close blob object", "err", err)
 		}
 	}()
+
+	// record successful download metrics
+	metrics.BlobDownloads.WithLabelValues("success").Inc()
+	metrics.BlobDownloadBytes.Add(float64(blob.Size))
 
 	// set headers
 	w.Header().Set("Content-Type", blob.MimeType)

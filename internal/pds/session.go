@@ -14,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/jcalabro/atlas/internal/pds/db"
+	"github.com/jcalabro/atlas/internal/pds/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"golang.org/x/crypto/bcrypt"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -33,6 +34,14 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	host := hostFromContext(ctx)
 
+	// metric status: empty means don't record (validation errors), otherwise records on return
+	metricStatus := ""
+	defer func() {
+		if metricStatus != "" {
+			metrics.AuthAttempts.WithLabelValues("login", metricStatus).Inc()
+		}
+	}()
+
 	var in atproto.ServerCreateSession_Input
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		s.badRequest(w, fmt.Errorf("invalid request body: %w", err))
@@ -48,6 +57,9 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		s.badRequest(w, fmt.Errorf("password is required"))
 		return
 	}
+
+	// past validation - start recording metrics (default to failure for auth)
+	metricStatus = "failure"
 
 	var (
 		actor *types.Actor
@@ -69,6 +81,7 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil && !errors.Is(err, db.ErrNotFound) {
+		metricStatus = "error"
 		s.internalErr(w, fmt.Errorf("failed to lookup account: %w", err))
 		return
 	}
@@ -91,10 +104,13 @@ func (s *server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 
 	session, err := s.createSession(r.Context(), actor)
 	if err != nil {
+		metricStatus = "error"
 		s.log.Error("failed to create session", "did", actor.Did, "err", err)
 		s.internalErr(w, fmt.Errorf("failed to create session"))
 		return
 	}
+
+	metricStatus = "success"
 
 	var status *string
 	if !actor.Active {
@@ -279,6 +295,12 @@ func (s *server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleRefreshSession(w http.ResponseWriter, r *http.Request) {
+	// default to error - already past auth middleware so all paths should record
+	metricStatus := "error"
+	defer func() {
+		metrics.AuthAttempts.WithLabelValues("refresh", metricStatus).Inc()
+	}()
+
 	actor := actorFromContext(r.Context())
 	if actor == nil {
 		s.internalErr(w, fmt.Errorf("actor not found in context"))
@@ -307,6 +329,8 @@ func (s *server) handleRefreshSession(w http.ResponseWriter, r *http.Request) {
 		s.internalErr(w, fmt.Errorf("failed to create session"))
 		return
 	}
+
+	metricStatus = "success"
 
 	var status *string
 	if !actor.Active {

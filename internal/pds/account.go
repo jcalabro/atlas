@@ -13,6 +13,7 @@ import (
 	"github.com/bluesky-social/indigo/atproto/syntax"
 	"github.com/jcalabro/atlas/internal/metrics"
 	"github.com/jcalabro/atlas/internal/pds/db"
+	pdsmetrics "github.com/jcalabro/atlas/internal/pds/metrics"
 	"github.com/jcalabro/atlas/internal/types"
 	"github.com/jcalabro/atlas/internal/util"
 	"go.opentelemetry.io/otel/attribute"
@@ -24,6 +25,14 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	span := spanFromContext(ctx)
 	host := hostFromContext(ctx)
+
+	// metric status: empty means don't record (validation errors), otherwise records on return
+	metricStatus := ""
+	defer func() {
+		if metricStatus != "" {
+			pdsmetrics.AccountCreations.WithLabelValues(metricStatus).Inc()
+		}
+	}()
 
 	var in atproto.ServerCreateAccount_Input
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
@@ -50,9 +59,13 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// past validation - start recording metrics (default to error)
+	metricStatus = "error"
+
 	// check if the handle is already taken (handles are globally unique)
 	_, err = s.directory.LookupHandle(ctx, handle)
 	if err == nil {
+		metricStatus = "handle_taken"
 		s.badRequest(w, fmt.Errorf("handle %q is already taken", in.Handle))
 		return
 	}
@@ -71,6 +84,7 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		// @NOTE (jrc): We should send a 200 of some kind here to ensure we're not opening
 		// ourselves up to email enumeration attacks. How can we do this in the constraints
 		// of the XRPC API?
+		metricStatus = "email_taken"
 		s.badRequest(w, fmt.Errorf("invalid create account json"))
 		return
 	}
@@ -138,6 +152,8 @@ func (s *server) handleCreateAccount(w http.ResponseWriter, r *http.Request) {
 		s.internalErr(w, fmt.Errorf("failed to create session: %w", err))
 		return
 	}
+
+	metricStatus = "success"
 
 	res := atproto.ServerCreateAccount_Output{
 		Did:        actor.Did,

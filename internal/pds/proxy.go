@@ -8,12 +8,14 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/bluesky-social/indigo/api/bsky"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
+	"github.com/jcalabro/atlas/internal/pds/metrics"
 )
 
 // appviewBackend represents a single appview backend with health status.
@@ -168,14 +170,18 @@ func (p *appviewProxy) proxy(w http.ResponseWriter, r *http.Request) error {
 // proxyWithAuth forwards an HTTP request to a healthy appview backend with an optional
 // service auth token. If serviceAuthToken is non-empty, it replaces the Authorization header.
 func (p *appviewProxy) proxyWithAuth(w http.ResponseWriter, r *http.Request, serviceAuthToken string) error {
+	start := time.Now()
+
 	backendURL, err := p.getHealthyBackend()
 	if err != nil {
+		metrics.ProxyErrors.WithLabelValues("no_backend").Inc()
 		return err
 	}
 
 	// parse the backend URL
 	target, err := url.Parse(backendURL)
 	if err != nil {
+		metrics.ProxyErrors.WithLabelValues("invalid_url").Inc()
 		return fmt.Errorf("invalid backend URL: %w", err)
 	}
 
@@ -192,6 +198,7 @@ func (p *appviewProxy) proxyWithAuth(w http.ResponseWriter, r *http.Request, ser
 
 	proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, proxyURL.String(), body)
 	if err != nil {
+		metrics.ProxyErrors.WithLabelValues("request_creation").Inc()
 		return fmt.Errorf("failed to create proxy request: %w", err)
 	}
 
@@ -210,9 +217,15 @@ func (p *appviewProxy) proxyWithAuth(w http.ResponseWriter, r *http.Request, ser
 	// forward the request
 	resp, err := p.client.Do(proxyReq)
 	if err != nil {
+		metrics.ProxyErrors.WithLabelValues("upstream").Inc()
 		return fmt.Errorf("proxy request failed: %w", err)
 	}
 	defer resp.Body.Close() // nolint:errcheck
+
+	// record proxy metrics
+	duration := time.Since(start).Seconds()
+	metrics.ProxyDuration.WithLabelValues(r.Method).Observe(duration)
+	metrics.ProxyRequests.WithLabelValues(r.Method, strconv.Itoa(resp.StatusCode)).Inc()
 
 	// copy response headers
 	for key, values := range resp.Header {
