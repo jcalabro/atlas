@@ -374,6 +374,8 @@ func (s *server) router() *http.ServeMux {
 	mux.HandleFunc("GET /xrpc/app.bsky.actor.getPreferences", s.authMiddleware(s.handleGetPreferences))
 	mux.HandleFunc("POST /xrpc/app.bsky.actor.putPreferences", s.authMiddleware(s.handlePutPreferences))
 
+	mux.HandleFunc("GET /xrpc/com.atproto.label.queryLabels", s.handleQueryLabels)
+
 	//
 	// Proxy catch-all for unhandled XRPC requests
 	//
