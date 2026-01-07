@@ -12,12 +12,14 @@ import (
 
 var fdbFlags = []cli.Flag{
 	&cli.StringFlag{
-		Name:  "fdb-cluster-file",
-		Value: "foundation.cluster",
+		Name:    "fdb-cluster-file",
+		Value:   "foundation.cluster",
+		Sources: cli.EnvVars("ATLAS_FDB_CLUSTER_FILE"),
 	},
 	&cli.IntFlag{
-		Name:  "fdb-api-version",
-		Value: 730,
+		Name:    "fdb-api-version",
+		Value:   730,
+		Sources: cli.EnvVars("ATLAS_FDB_API_VERSION"),
 	},
 }
 
@@ -27,19 +29,22 @@ func main() {
 		Usage: "ATlas is the atmosphere database",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:  "log-lvl",
-				Usage: "Minimum logging level (debug, info, warn, err)",
-				Value: "info",
+				Name:    "log-lvl",
+				Usage:   "Minimum logging level (debug, info, warn, err)",
+				Value:   "info",
+				Sources: cli.EnvVars("ATLAS_LOG_LVL"),
 			},
 			&cli.StringFlag{
-				Name:  "log-fmt",
-				Usage: "Log output format (default, json)",
-				Value: "json",
+				Name:    "log-fmt",
+				Usage:   "Log output format (default, json)",
+				Value:   "json",
+				Sources: cli.EnvVars("ATLAS_LOG_FMT"),
 			},
 			&cli.BoolFlag{
-				Name:  "log-src",
-				Usage: "Whether or not to include source line numbers in log lines",
-				Value: true,
+				Name:    "log-src",
+				Usage:   "Whether or not to include source line numbers in log lines",
+				Value:   true,
+				Sources: cli.EnvVars("ATLAS_LOG_SRC"),
 			},
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
