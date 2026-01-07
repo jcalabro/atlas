@@ -1299,7 +1299,7 @@ func TestAuthMiddleware(t *testing.T) {
 		var resp map[string]any
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "authorization header is required")
+		require.Contains(t, resp["message"], "authorization header is required")
 	})
 
 	t.Run("rejects malformed authorization header", func(t *testing.T) {
@@ -1346,7 +1346,7 @@ func TestAuthMiddleware(t *testing.T) {
 		var resp map[string]any
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "invalid or expired token")
+		require.Contains(t, resp["message"], "invalid or expired token")
 	})
 
 	t.Run("rejects expired access token", func(t *testing.T) {
@@ -1397,7 +1397,7 @@ func TestAuthMiddleware(t *testing.T) {
 		var resp map[string]any
 		err := json.NewDecoder(w.Body).Decode(&resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "invalid or expired token")
+		require.Contains(t, resp["message"], "invalid or expired token")
 	})
 
 	t.Run("rejects refresh token for access endpoint", func(t *testing.T) {
@@ -1508,7 +1508,7 @@ func TestAuthMiddleware(t *testing.T) {
 		var resp map[string]any
 		err = json.NewDecoder(w.Body).Decode(&resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "actor not found")
+		require.Contains(t, resp["message"], "actor not found")
 	})
 
 	t.Run("rejects refresh token not in actor's token list", func(t *testing.T) {
@@ -1534,7 +1534,7 @@ func TestAuthMiddleware(t *testing.T) {
 		var resp map[string]any
 		err = json.NewDecoder(w.Body).Decode(&resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "refresh token not found")
+		require.Contains(t, resp["message"], "refresh token not found")
 	})
 
 	t.Run("rejects refresh token expired in database but valid JWT", func(t *testing.T) {
@@ -1596,7 +1596,7 @@ func TestAuthMiddleware(t *testing.T) {
 		var resp map[string]any
 		err = json.NewDecoder(w.Body).Decode(&resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "refresh token expired")
+		require.Contains(t, resp["message"], "refresh token expired")
 	})
 
 	t.Run("sets actor and token in context", func(t *testing.T) {

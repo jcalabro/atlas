@@ -29,7 +29,7 @@ func TestHandleGetFeed(t *testing.T) {
 		var resp map[string]string
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "feed parameter is required")
+		require.Contains(t, resp["message"], "feed parameter is required")
 	})
 
 	t.Run("invalid feed URI returns 400", func(t *testing.T) {
@@ -58,7 +58,7 @@ func TestHandleGetFeed(t *testing.T) {
 				var resp map[string]string
 				err := json.Unmarshal(w.Body.Bytes(), &resp)
 				require.NoError(t, err)
-				require.Contains(t, resp["msg"], "invalid feed URI")
+				require.Contains(t, resp["message"], "invalid feed URI")
 			})
 		}
 	})
@@ -79,7 +79,7 @@ func TestHandleGetFeed(t *testing.T) {
 		var resp map[string]string
 		err := json.Unmarshal(w.Body.Bytes(), &resp)
 		require.NoError(t, err)
-		require.Contains(t, resp["msg"], "no appview configured")
+		require.Contains(t, resp["message"], "no appview configured")
 	})
 
 	t.Run("proxies unauthenticated request to appview", func(t *testing.T) {

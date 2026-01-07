@@ -290,12 +290,32 @@ func (s *server) internalErr(w http.ResponseWriter, err error) {
 }
 
 func (s *server) err(w http.ResponseWriter, code int, err error) {
+	// XRPC error format
 	type response struct {
-		Err string `json:"msg"`
+		Error   string `json:"error"`
+		Message string `json:"message"`
+	}
+
+	// map HTTP status codes to XRPC error names
+	var errName string
+	switch code {
+	case http.StatusBadRequest:
+		errName = "InvalidRequest"
+	case http.StatusUnauthorized:
+		errName = "AuthenticationRequired"
+	case http.StatusForbidden:
+		errName = "Forbidden"
+	case http.StatusNotFound:
+		errName = "NotFound"
+	case http.StatusConflict:
+		errName = "Conflict"
+	default:
+		errName = "InternalServerError"
 	}
 
 	s.jsonWithCode(w, code, &response{
-		Err: err.Error(),
+		Error:   errName,
+		Message: err.Error(),
 	})
 }
 

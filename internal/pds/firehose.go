@@ -13,6 +13,7 @@ import (
 	"github.com/bluesky-social/indigo/api/atproto"
 	"github.com/bluesky-social/indigo/events"
 	lexutil "github.com/bluesky-social/indigo/lex/util"
+	"github.com/bluesky-social/indigo/util"
 	"github.com/gorilla/websocket"
 	"github.com/ipfs/go-cid"
 	"github.com/jcalabro/atlas/internal/pds/db"
@@ -315,23 +316,30 @@ func (f *firehose) replayEvents(ctx context.Context, sub *subscriber, cursor []b
 
 // sendEvent encodes and sends a single event to a subscriber
 func (f *firehose) sendEvent(sub *subscriber, event *types.RepoEvent) error {
-	var msg []byte
-	var err error
+	var (
+		msg     []byte
+		msgType string
+		err     error
+	)
 
 	// encode based on event type
 	switch event.EventType {
 	case types.EventType_EVENT_TYPE_IDENTITY:
 		msg, err = encodeIdentityEvent(event)
+		msgType = "identity"
 	case types.EventType_EVENT_TYPE_ACCOUNT:
 		msg, err = encodeAccountEvent(event)
+		msgType = "account"
 	default:
 		// EVENT_TYPE_UNSPECIFIED and EVENT_TYPE_COMMIT are both commit events
 		msg, err = encodeCommitEvent(event)
+		msgType = "commit"
 	}
-
 	if err != nil {
 		return fmt.Errorf("failed to encode event: %w", err)
 	}
+
+	f.log.Info("sending event to subscriber", "sub_id", sub.id, "seq", event.Seq, "type", msgType, "repo", event.Repo)
 
 	sub.connMu.Lock()
 	defer sub.connMu.Unlock()
@@ -345,7 +353,7 @@ func encodeIdentityEvent(event *types.RepoEvent) ([]byte, error) {
 		Seq:    event.Seq,
 		Did:    event.Repo,
 		Handle: &event.Handle,
-		Time:   event.Time.AsTime().Format(time.RFC3339Nano),
+		Time:   event.Time.AsTime().Format(util.ISO8601),
 	}
 
 	var buf bytes.Buffer
@@ -371,7 +379,7 @@ func encodeAccountEvent(event *types.RepoEvent) ([]byte, error) {
 		Seq:    event.Seq,
 		Did:    event.Repo,
 		Active: event.Active,
-		Time:   event.Time.AsTime().Format(time.RFC3339Nano),
+		Time:   event.Time.AsTime().Format(util.ISO8601),
 	}
 	if event.Status != "" {
 		account.Status = &event.Status
@@ -429,7 +437,7 @@ func encodeCommitEvent(event *types.RepoEvent) ([]byte, error) {
 		Commit: lexutil.LexLink(commitCID),
 		Blocks: event.Blocks,
 		Ops:    ops,
-		Time:   event.Time.AsTime().Format(time.RFC3339Nano),
+		Time:   event.Time.AsTime().Format(util.ISO8601),
 		TooBig: event.TooBig,
 	}
 
