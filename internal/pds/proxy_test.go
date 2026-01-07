@@ -7,10 +7,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -365,6 +367,132 @@ func TestHandleProxy(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Contains(t, w.Body.String(), "success")
+	})
+
+	t.Run("creates service auth token when user is authenticated with atproto-proxy header", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedAuthHeader string
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedAuthHeader = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		srvWithProxy := testServer(t)
+		srvWithProxy.appviewProxy = newAppviewProxy(srvWithProxy.log, []string{backend.URL})
+		t.Cleanup(func() {
+			srvWithProxy.appviewProxy.CloseIdleConnections()
+			backend.Close()
+		})
+
+		did := "did:plc:" + uuid.NewString()[:24]
+		actor, session := setupTestActor(t, srvWithProxy, did, "proxy-test@dev.atlaspds.dev", "proxy-test.dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/app.bsky.notification.listNotifications", nil)
+		req.Header.Set("Authorization", "Bearer "+session.AccessToken)
+		req.Header.Set("atproto-proxy", "did:web:api.bsky.app#bsky_appview")
+		req = addTestHostContext(srvWithProxy, req)
+
+		srvWithProxy.handleProxy(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		// should have a service auth token, not the original access token
+		require.NotEmpty(t, receivedAuthHeader)
+		require.True(t, strings.HasPrefix(receivedAuthHeader, "Bearer "))
+		require.NotEqual(t, "Bearer "+session.AccessToken, receivedAuthHeader)
+
+		// verify the service auth token has the correct structure (ES256K JWT)
+		parts := strings.Split(strings.TrimPrefix(receivedAuthHeader, "Bearer "), ".")
+		require.Len(t, parts, 3, "service auth token should be a JWT with 3 parts")
+
+		// decode payload and verify claims
+		payload := decodeJWTPayload(t, parts[1])
+		require.Equal(t, actor.Did, payload["iss"], "issuer should be the actor's DID")
+		require.Equal(t, "did:web:api.bsky.app", payload["aud"], "audience should be the service DID")
+		require.Equal(t, "app.bsky.notification.listNotifications", payload["lxm"], "lxm should be the lexicon method")
+	})
+
+	t.Run("removes Authorization header when user not authenticated with atproto-proxy header", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedAuthHeader string
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedAuthHeader = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		srvWithProxy := testServer(t)
+		srvWithProxy.appviewProxy = newAppviewProxy(srvWithProxy.log, []string{backend.URL})
+		t.Cleanup(func() {
+			srvWithProxy.appviewProxy.CloseIdleConnections()
+			backend.Close()
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/app.bsky.notification.listNotifications", nil)
+		req.Header.Set("Authorization", "Bearer some-invalid-token")
+		req.Header.Set("atproto-proxy", "did:web:api.bsky.app#bsky_appview")
+		req = addTestHostContext(srvWithProxy, req)
+
+		srvWithProxy.handleProxy(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		// Authorization header should be removed since user couldn't be authenticated
+		require.Empty(t, receivedAuthHeader)
+	})
+
+	t.Run("strips auth header when no atproto-proxy header", func(t *testing.T) {
+		t.Parallel()
+
+		var receivedAuthHeader string
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedAuthHeader = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		srvWithProxy := testServer(t)
+		srvWithProxy.appviewProxy = newAppviewProxy(srvWithProxy.log, []string{backend.URL})
+		t.Cleanup(func() {
+			srvWithProxy.appviewProxy.CloseIdleConnections()
+			backend.Close()
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/app.bsky.feed.getTimeline", nil)
+		req.Header.Set("Authorization", "Bearer some-token")
+		req = addTestHostContext(srvWithProxy, req)
+
+		srvWithProxy.handleProxy(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		// without atproto-proxy header, auth should be stripped for security
+		// (we should never forward user PDS tokens to upstream services)
+		require.Empty(t, receivedAuthHeader)
+	})
+
+	t.Run("returns bad request for invalid atproto-proxy header format", func(t *testing.T) {
+		t.Parallel()
+
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		srvWithProxy := testServer(t)
+		srvWithProxy.appviewProxy = newAppviewProxy(srvWithProxy.log, []string{backend.URL})
+		t.Cleanup(func() {
+			srvWithProxy.appviewProxy.CloseIdleConnections()
+			backend.Close()
+		})
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/app.bsky.feed.getTimeline", nil)
+		req.Header.Set("atproto-proxy", "did:web:api.bsky.app") // missing #service_id
+		req = addTestHostContext(srvWithProxy, req)
+
+		srvWithProxy.handleProxy(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -209,9 +210,12 @@ func (p *appviewProxy) proxyWithAuth(w http.ResponseWriter, r *http.Request, ser
 		}
 	}
 
-	// override Authorization header with service auth token if provided
+	// handle Authorization header: either replace with service auth token or remove entirely
+	// we never want to forward the user's PDS access token to upstream services
 	if serviceAuthToken != "" {
 		proxyReq.Header.Set("Authorization", "Bearer "+serviceAuthToken)
+	} else {
+		proxyReq.Header.Del("Authorization")
 	}
 
 	// forward the request
@@ -252,7 +256,51 @@ func (s *server) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.appviewProxy.proxy(w, r); err != nil {
+	// extract the lexicon method from the path (e.g., /xrpc/app.bsky.notification.listNotifications)
+	path := r.URL.Path
+	parts := strings.Split(path, "/")
+	if len(parts) != 3 || parts[1] != "xrpc" {
+		s.badRequest(w, fmt.Errorf("invalid xrpc path"))
+		return
+	}
+	lxm := parts[2]
+
+	// get the service DID from the atproto-proxy header
+	proxyHeader := r.Header.Get("atproto-proxy")
+	if proxyHeader == "" {
+		// no proxy header, just forward without auth
+		if err := s.appviewProxy.proxy(w, r); err != nil {
+			s.log.Error("proxy error", "err", err, "path", r.URL.Path)
+			s.internalErr(w, fmt.Errorf("proxy error: %w", err))
+		}
+		return
+	}
+
+	// parse the proxy header (format: did:web:api.bsky.app#bsky_appview)
+	hashIdx := strings.LastIndex(proxyHeader, "#")
+	if hashIdx == -1 {
+		s.badRequest(w, fmt.Errorf("invalid atproto-proxy header format"))
+		return
+	}
+	serviceDID := proxyHeader[:hashIdx]
+
+	// try to authenticate the user (optional auth for proxy requests)
+	actor := s.tryGetAuthenticatedActor(r)
+
+	var serviceAuthToken string
+	if actor != nil {
+		// create service auth token for the target service
+		token, err := createServiceAuthToken(actor, serviceDID, lxm)
+		if err != nil {
+			s.log.Error("failed to create service auth token", "err", err, "did", actor.Did)
+			s.internalErr(w, fmt.Errorf("authentication error"))
+			return
+		}
+		serviceAuthToken = token
+	}
+
+	// proxy the request with the service auth token (or empty to strip auth header)
+	if err := s.appviewProxy.proxyWithAuth(w, r, serviceAuthToken); err != nil {
 		s.log.Error("proxy error", "err", err, "path", r.URL.Path)
 		s.internalErr(w, fmt.Errorf("proxy error: %w", err))
 	}
