@@ -36,6 +36,9 @@ const (
 
 	// pongWait is how long to wait for pong response
 	pongWait = 60 * time.Second
+
+	// pingInterval is how often to send ping frames to keep connection alive
+	pingInterval = 30 * time.Second
 )
 
 var upgrader = websocket.Upgrader{
@@ -241,6 +244,25 @@ func (f *firehose) Subscribe(ctx context.Context, w http.ResponseWriter, r *http
 			if err != nil {
 				cancel()
 				return
+			}
+		}
+	}()
+
+	// start goroutine to send ping frames periodically
+	go func() {
+		ticker := time.NewTicker(pingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-subCtx.Done():
+				return
+			case <-ticker.C:
+				conn.SetWriteDeadline(time.Now().Add(writeTimeout)) //nolint:errcheck
+				if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+					f.log.Debug("failed to send ping", "err", err, "id", sub.id)
+					cancel()
+					return
+				}
 			}
 		}
 	}()
