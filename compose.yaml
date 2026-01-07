@@ -1,4 +1,13 @@
 services:
+  garage:
+    image: dxflrs/garage:v2.1.0
+    container_name: atlas-garage
+    network_mode: host
+    environment:
+      GARAGE_CONFIG_FILE: /etc/garage.toml
+    volumes:
+      - ./garage.toml:/etc/garage.toml:ro
+
   fdb-coordinator:
     image: foundationdb/foundationdb:7.3.63
     container_name: atlas-fdb-coordinator

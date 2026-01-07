@@ -18,13 +18,53 @@ up:
     docker compose up -d
 
     if ! fdbcli -C foundation.cluster --exec status --timeout 1 ; then
-        if ! fdbcli -C foundation.cluster --exec "configure new single ssd-redwood-1 ; status" --timeout 10 ; then 
+        if ! fdbcli -C foundation.cluster --exec "configure new single ssd-redwood-1 ; status" --timeout 10 ; then
             echo "Unable to configure new FDB cluster."
             exit 1
         fi
     fi
 
+    just init-garage
+
     echo "development environment is ready"
+
+# Initializes the garage S3-compatible storage (called automatically by `up`)
+init-garage:
+    #!/usr/bin/env bash
+    set -e
+
+    # hardcoded dev credentials (never use in production)
+    KEY_ID="GK000000000000000000000000"
+    SECRET_KEY="0000000000000000000000000000000000000000000000000000000000000000"
+
+    # wait for garage to be ready
+    for i in {1..30}; do
+        if docker exec atlas-garage /garage status &>/dev/null; then
+            break
+        fi
+        sleep 0.5
+    done
+
+    # configure layout if needed
+    if docker exec atlas-garage /garage layout show 2>&1 | grep -q "No nodes"; then
+        NODE_ID=$(docker exec atlas-garage /garage status 2>/dev/null | grep -oE '[a-f0-9]{16}' | head -1)
+        docker exec atlas-garage /garage layout assign -z dc1 -c 1G "$NODE_ID"
+        docker exec atlas-garage /garage layout apply --version 1
+    fi
+
+    # import dev key and create bucket if needed
+    if ! docker exec atlas-garage /garage key info atlas-dev &>/dev/null; then
+        docker exec atlas-garage /garage key import -n atlas-dev --yes "$KEY_ID" "$SECRET_KEY"
+    fi
+
+    if ! docker exec atlas-garage /garage bucket info blobs &>/dev/null; then
+        docker exec atlas-garage /garage bucket create blobs
+        docker exec atlas-garage /garage bucket allow --read --write --owner blobs --key atlas-dev
+    fi
+
+    echo "garage S3 ready - endpoint: http://localhost:3900  bucket: blobs"
+    echo "  access_key: $KEY_ID"
+    echo "  secret_key: $SECRET_KEY"
 
 # Tears down the local development dependencies
 down:
