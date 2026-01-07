@@ -345,6 +345,7 @@ func (s *server) router() *http.ServeMux {
 
 	mux.HandleFunc("GET /xrpc/com.atproto.repo.describeRepo", s.handleDescribeRepo)
 	mux.HandleFunc("GET /xrpc/com.atproto.repo.getRecord", s.handleGetRecord)
+	mux.HandleFunc("GET /xrpc/com.atproto.repo.listRecords", s.handleListRecords)
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.createRecord", s.authMiddleware(s.handleCreateRecord))
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.putRecord", s.authMiddleware(s.handlePutRecord))
 	mux.HandleFunc("POST /xrpc/com.atproto.repo.deleteRecord", s.authMiddleware(s.handleDeleteRecord))

@@ -689,6 +689,102 @@ func (s *server) handleApplyWrites(w http.ResponseWriter, r *http.Request) {
 	s.jsonOK(w, resp)
 }
 
+func (s *server) handleListRecords(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	span := spanFromContext(ctx)
+	defer span.End()
+
+	repo := r.URL.Query().Get("repo")
+	collection := r.URL.Query().Get("collection")
+	cursor := r.URL.Query().Get("cursor")
+	reverseParam := r.URL.Query().Get("reverse")
+
+	switch {
+	case repo == "":
+		s.badRequest(w, fmt.Errorf("repo is required"))
+		return
+	case collection == "":
+		s.badRequest(w, fmt.Errorf("collection is required"))
+		return
+	}
+
+	if _, err := syntax.ParseNSID(collection); err != nil {
+		s.badRequest(w, fmt.Errorf("invalid collection nsid: %w", err))
+		return
+	}
+
+	limit, err := parseIntParam(r, "limit", 50)
+	if err != nil || limit < 1 {
+		s.badRequest(w, fmt.Errorf("invalid limit"))
+		return
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	reverse := reverseParam == "true"
+
+	// resolve repo to DID if it's a handle
+	did := repo
+	if _, err := syntax.ParseDID(repo); err != nil {
+		// not a DID, try to resolve as handle
+		ident, err := s.directory.LookupHandle(ctx, syntax.Handle(repo))
+		if err != nil {
+			s.notFound(w, fmt.Errorf("could not resolve handle: %w", err))
+			return
+		}
+		did = ident.DID.String()
+	}
+
+	// verify repo exists
+	_, err = s.db.GetActorByDID(ctx, did)
+	if errors.Is(err, db.ErrNotFound) {
+		s.notFound(w, fmt.Errorf("repo not found"))
+		return
+	}
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to get repo: %w", err))
+		return
+	}
+
+	result, err := s.db.ListRecords(ctx, did, collection, int(limit), cursor, reverse)
+	if err != nil {
+		s.internalErr(w, fmt.Errorf("failed to list records: %w", err))
+		return
+	}
+
+	type recordItem struct {
+		Uri   string         `json:"uri"`
+		Cid   string         `json:"cid"`
+		Value map[string]any `json:"value"`
+	}
+
+	records := make([]recordItem, 0, len(result.Records))
+	for _, rec := range result.Records {
+		val, err := atdata.UnmarshalCBOR(rec.Value)
+		if err != nil {
+			s.internalErr(w, fmt.Errorf("failed to decode record value: %w", err))
+			return
+		}
+
+		records = append(records, recordItem{
+			Uri:   at.FormatURI(rec.Did, rec.Collection, rec.Rkey),
+			Cid:   rec.Cid,
+			Value: val,
+		})
+	}
+
+	type response struct {
+		Cursor  *string      `json:"cursor,omitempty"`
+		Records []recordItem `json:"records"`
+	}
+
+	s.jsonOK(w, response{
+		Cursor:  nextCursorOrNil(result.Cursor),
+		Records: records,
+	})
+}
+
 func (s *server) handleDescribeRepo(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	span := spanFromContext(ctx)

@@ -128,6 +128,92 @@ func (db *DB) decrementCollectionCountTx(tx fdb.Transaction, did, collection str
 	tx.Add(key, minusOne)
 }
 
+// ListRecordsResult contains the result of listing records in a collection.
+type ListRecordsResult struct {
+	Records []*types.Record
+	Cursor  string
+}
+
+// ListRecords returns records in a collection for a given DID.
+// Supports pagination via cursor and can be reversed.
+func (db *DB) ListRecords(
+	ctx context.Context,
+	did string,
+	collection string,
+	limit int,
+	cursor string,
+	reverse bool,
+) (result *ListRecordsResult, err error) {
+	_, span, done := db.observe(ctx, "ListRecords")
+	defer func() { done(err) }()
+
+	span.SetAttributes(
+		attribute.String("did", did),
+		attribute.String("collection", collection),
+		attribute.Int("limit", limit),
+		attribute.String("cursor", cursor),
+		attribute.Bool("reverse", reverse),
+	)
+
+	result, err = readTransaction(db.db, func(tx fdb.ReadTransaction) (*ListRecordsResult, error) {
+		var rangeBegin, rangeEnd fdb.Key
+
+		if cursor == "" {
+			// no cursor - start from beginning or end of collection
+			rangeBegin = pack(db.records.records, did, collection)
+			rangeEnd = pack(db.records.records, did, collection+"\xff")
+		} else {
+			// cursor is the rkey of the last record seen
+			if reverse {
+				// for reverse, get records with rkey < cursor
+				rangeBegin = pack(db.records.records, did, collection)
+				rangeEnd = pack(db.records.records, did, collection, cursor)
+			} else {
+				// for forward, get records with rkey > cursor
+				rangeBegin = pack(db.records.records, did, collection, cursor+"\x00")
+				rangeEnd = pack(db.records.records, did, collection+"\xff")
+			}
+		}
+
+		kr := fdb.KeyRange{Begin: rangeBegin, End: rangeEnd}
+		opts := fdb.RangeOptions{
+			Limit:   limit + 1, // fetch one extra to detect if there are more results
+			Reverse: reverse,
+		}
+
+		var records []*types.Record
+		iter := tx.GetRange(kr, opts).Iterator()
+		for iter.Advance() {
+			kv, err := iter.Get()
+			if err != nil {
+				return nil, fmt.Errorf("failed to iterate records: %w", err)
+			}
+
+			var record types.Record
+			if err := proto.Unmarshal(kv.Value, &record); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal record: %w", err)
+			}
+
+			records = append(records, &record)
+		}
+
+		// determine cursor for next page
+		var nextCursor string
+		if len(records) > limit {
+			// there are more results - set cursor to last returned record's rkey
+			records = records[:limit]
+			nextCursor = records[len(records)-1].Rkey
+		}
+
+		return &ListRecordsResult{
+			Records: records,
+			Cursor:  nextCursor,
+		}, nil
+	})
+
+	return
+}
+
 // GetCollections returns the list of distinct collection NSIDs for a DID.
 // It reads from the collection counts secondary index for efficiency.
 func (db *DB) GetCollections(ctx context.Context, did string) (collections []string, err error) {

@@ -2320,3 +2320,401 @@ func TestHandleDescribeRepo(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 }
+
+func TestHandleListRecords(t *testing.T) {
+	t.Parallel()
+	srv := testServer(t)
+	router := srv.router()
+	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
+
+	// use timestamp suffix to make DIDs unique across test runs
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	t.Run("success - lists records in collection", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:listrecords1"+suffix, "listrecords1@example.com", "listrecords1"+suffix+".dev.atlaspds.dev")
+
+		// create some records
+		for i := range 5 {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": "app.bsky.feed.post",
+				"rkey":       tid.String(),
+				"record": map[string]any{
+					"$type":     "app.bsky.feed.post",
+					"text":      fmt.Sprintf("Post %d for listRecords", i),
+					"createdAt": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			// reload actor before each create
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+		}
+
+		// list the records
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+		var out struct {
+			Cursor  *string `json:"cursor"`
+			Records []struct {
+				Uri   string         `json:"uri"`
+				Cid   string         `json:"cid"`
+				Value map[string]any `json:"value"`
+			} `json:"records"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Len(t, out.Records, 5)
+		for _, record := range out.Records {
+			require.Contains(t, record.Uri, actor.Did)
+			require.Contains(t, record.Uri, "app.bsky.feed.post")
+			require.NotEmpty(t, record.Cid)
+			require.NotNil(t, record.Value)
+			require.Equal(t, "app.bsky.feed.post", record.Value["$type"])
+		}
+	})
+
+	t.Run("success - respects limit parameter", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:listrecords2"+suffix, "listrecords2@example.com", "listrecords2"+suffix+".dev.atlaspds.dev")
+
+		// create 5 records
+		for i := range 5 {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": "app.bsky.feed.post",
+				"rkey":       tid.String(),
+				"record": map[string]any{
+					"$type":     "app.bsky.feed.post",
+					"text":      fmt.Sprintf("Post %d", i),
+					"createdAt": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+		}
+
+		// list with limit of 2
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post&limit=2", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out struct {
+			Cursor  *string `json:"cursor"`
+			Records []any   `json:"records"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Len(t, out.Records, 2)
+		require.NotNil(t, out.Cursor, "cursor should be set when there are more records")
+	})
+
+	t.Run("success - pagination with cursor", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:listrecords3"+suffix, "listrecords3@example.com", "listrecords3"+suffix+".dev.atlaspds.dev")
+
+		// create 5 records
+		for i := range 5 {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": "app.bsky.feed.post",
+				"rkey":       tid.String(),
+				"record": map[string]any{
+					"$type":     "app.bsky.feed.post",
+					"text":      fmt.Sprintf("Post %d", i),
+					"createdAt": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+		}
+
+		// first page
+		w1 := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post&limit=2", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w1, req)
+
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		var out1 struct {
+			Cursor  *string `json:"cursor"`
+			Records []struct {
+				Uri string `json:"uri"`
+			} `json:"records"`
+		}
+		err := json.Unmarshal(w1.Body.Bytes(), &out1)
+		require.NoError(t, err)
+
+		require.Len(t, out1.Records, 2)
+		require.NotNil(t, out1.Cursor)
+
+		// second page using cursor
+		w2 := httptest.NewRecorder()
+		url = fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post&limit=2&cursor=%s", actor.Did, *out1.Cursor)
+		req = httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w2, req)
+
+		require.Equal(t, http.StatusOK, w2.Code)
+
+		var out2 struct {
+			Cursor  *string `json:"cursor"`
+			Records []struct {
+				Uri string `json:"uri"`
+			} `json:"records"`
+		}
+		err = json.Unmarshal(w2.Body.Bytes(), &out2)
+		require.NoError(t, err)
+
+		require.Len(t, out2.Records, 2)
+
+		// verify different records
+		require.NotEqual(t, out1.Records[0].Uri, out2.Records[0].Uri)
+	})
+
+	t.Run("success - empty collection", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:listrecords4"+suffix, "listrecords4@example.com", "listrecords4"+suffix+".dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+
+		var out struct {
+			Cursor  *string `json:"cursor"`
+			Records []any   `json:"records"`
+		}
+		err := json.Unmarshal(w.Body.Bytes(), &out)
+		require.NoError(t, err)
+
+		require.Len(t, out.Records, 0)
+		require.Nil(t, out.Cursor)
+	})
+
+	t.Run("success - caps limit at 100", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:listrecords5"+suffix, "listrecords5@example.com", "listrecords5"+suffix+".dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post&limit=9999", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		// should succeed (limit is capped internally)
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("success - reverse order", func(t *testing.T) {
+		t.Parallel()
+
+		actor, session := setupTestActor(t, srv, "did:plc:listrecords6"+suffix, "listrecords6@example.com", "listrecords6"+suffix+".dev.atlaspds.dev")
+
+		// create 3 records with known rkeys
+		rkeys := make([]string, 3)
+		for i := range 3 {
+			tid, err := srv.db.NextTID(ctx, actor.Did)
+			require.NoError(t, err)
+			rkeys[i] = tid.String()
+
+			input := map[string]any{
+				"repo":       actor.Did,
+				"collection": "app.bsky.feed.post",
+				"rkey":       rkeys[i],
+				"record": map[string]any{
+					"$type":     "app.bsky.feed.post",
+					"text":      fmt.Sprintf("Post %d", i),
+					"createdAt": time.Now().Format(time.RFC3339),
+				},
+			}
+
+			body, err := json.Marshal(input)
+			require.NoError(t, err)
+
+			actor, err = srv.db.GetActorByDID(ctx, actor.Did)
+			require.NoError(t, err)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, "/xrpc/com.atproto.repo.createRecord", bytes.NewReader(body))
+			req = addAuthContext(t, ctx, srv, req, actor, session.AccessToken)
+			srv.handleCreateRecord(w, req)
+			require.Equal(t, http.StatusOK, w.Code)
+		}
+
+		// list forward
+		w1 := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w1, req)
+		require.Equal(t, http.StatusOK, w1.Code)
+
+		var out1 struct {
+			Records []struct {
+				Uri string `json:"uri"`
+			} `json:"records"`
+		}
+		err := json.Unmarshal(w1.Body.Bytes(), &out1)
+		require.NoError(t, err)
+
+		// list reverse
+		w2 := httptest.NewRecorder()
+		url = fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post&reverse=true", actor.Did)
+		req = httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w2, req)
+		require.Equal(t, http.StatusOK, w2.Code)
+
+		var out2 struct {
+			Records []struct {
+				Uri string `json:"uri"`
+			} `json:"records"`
+		}
+		err = json.Unmarshal(w2.Body.Bytes(), &out2)
+		require.NoError(t, err)
+
+		// verify order is reversed
+		require.Len(t, out1.Records, 3)
+		require.Len(t, out2.Records, 3)
+		require.Equal(t, out1.Records[0].Uri, out2.Records[2].Uri)
+		require.Equal(t, out1.Records[2].Uri, out2.Records[0].Uri)
+	})
+
+	t.Run("error - missing repo parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.listRecords?collection=app.bsky.feed.post", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - missing collection parameter", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.listRecords?repo=did:plc:test", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid collection nsid", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:listrecords7"+suffix, "listrecords7@example.com", "listrecords7"+suffix+".dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=not-a-nsid", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid limit (negative)", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:listrecords8"+suffix, "listrecords8@example.com", "listrecords8"+suffix+".dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post&limit=-1", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - invalid limit (zero)", func(t *testing.T) {
+		t.Parallel()
+
+		actor, _ := setupTestActor(t, srv, "did:plc:listrecords9"+suffix, "listrecords9@example.com", "listrecords9"+suffix+".dev.atlaspds.dev")
+
+		w := httptest.NewRecorder()
+		url := fmt.Sprintf("/xrpc/com.atproto.repo.listRecords?repo=%s&collection=app.bsky.feed.post&limit=0", actor.Did)
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("error - repo not found", func(t *testing.T) {
+		t.Parallel()
+
+		w := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/xrpc/com.atproto.repo.listRecords?repo=did:plc:nonexistent&collection=app.bsky.feed.post", nil)
+		req = addTestHostContext(srv, req)
+		router.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
