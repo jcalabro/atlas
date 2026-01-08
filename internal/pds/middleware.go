@@ -174,7 +174,7 @@ func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		if len(parts) != 2 || parts[0] != "Bearer" || parts[1] == "" {
 			s.unauthorized(w, fmt.Errorf("invalid authorization header format"))
 			return
 		}

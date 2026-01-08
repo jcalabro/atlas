@@ -1312,6 +1312,7 @@ func TestAuthMiddleware(t *testing.T) {
 			{"no bearer prefix", "token123"},
 			{"wrong prefix", "Basic token123"},
 			{"only bearer", "Bearer"},
+			{"bearer with empty token", "Bearer "},
 			{"multiple spaces", "Bearer  token  extra"},
 		}
 
