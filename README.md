@@ -4,6 +4,11 @@
 
 A scalable, multi-tenant [Personal Data Server](https://atproto.com/guides/overview#personal-data-servers) (PDS) for the [AT Protocol](https://atproto.com/).
 
+## Status
+
+> [!WARNING]
+Do not use this software yet. It has not been battle-hardened and is missing many critical features. A thorough review is needed before considering running it in production. The authors assume ABSOLUTELY NO responsibility for any issues caused whatsoever.
+
 ## Quick Start
 
 ### Prerequisites
