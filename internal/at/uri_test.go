@@ -124,6 +124,9 @@ func TestURI_String(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.expected, tt.uri.String())
+
+			str := FormatURI(tt.uri.Repo, tt.uri.Collection, tt.uri.Rkey)
+			require.Equal(t, tt.expected, str)
 		})
 	}
 }
