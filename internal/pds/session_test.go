@@ -546,7 +546,7 @@ func TestHandleCreateSession(t *testing.T) {
 	srv.hosts[testPDSHost].serviceDID = "did:plc:test-service-12345"
 
 	setupTestActor := func(did, email, handle, password string) *types.Actor {
-		pwHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		actor := &types.Actor{
@@ -711,7 +711,7 @@ func TestHandleCreateSession(t *testing.T) {
 	t.Run("includes deactivated status for inactive account", func(t *testing.T) {
 		t.Parallel()
 
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		actor := &types.Actor{
@@ -765,7 +765,7 @@ func TestHandleGetSession(t *testing.T) {
 	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		actor := &types.Actor{
@@ -826,7 +826,7 @@ func TestHandleGetSession(t *testing.T) {
 	t.Run("returns deactivated status for inactive account", func(t *testing.T) {
 		t.Parallel()
 
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		actor := &types.Actor{
@@ -926,7 +926,7 @@ func TestHandleRefreshSession(t *testing.T) {
 	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		actor := &types.Actor{
@@ -1070,7 +1070,7 @@ func TestHandleDeleteSession(t *testing.T) {
 	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		actor := &types.Actor{
@@ -1220,7 +1220,7 @@ func TestAuthMiddleware(t *testing.T) {
 	hostCtx := context.WithValue(ctx, hostContextKey{}, srv.hosts[testPDSHost])
 
 	setupTestActor := func(did, email, handle string) (*types.Actor, *Session) {
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		actor := &types.Actor{
@@ -1541,7 +1541,7 @@ func TestAuthMiddleware(t *testing.T) {
 	t.Run("rejects refresh token expired in database but valid JWT", func(t *testing.T) {
 		t.Parallel()
 
-		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+		pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 		require.NoError(t, err)
 
 		now := time.Now()

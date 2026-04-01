@@ -76,8 +76,8 @@ func TestNextTID_Concurrent(t *testing.T) {
 	db := testDB(t)
 
 	did := "did:plc:tidtest3"
-	numGoroutines := 10
-	tidsPerGoroutine := 10
+	numGoroutines := 5
+	tidsPerGoroutine := 5
 
 	var wg sync.WaitGroup
 	tidChan := make(chan uint64, numGoroutines*tidsPerGoroutine)

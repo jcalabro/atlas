@@ -77,7 +77,7 @@ func setupTestActor(t *testing.T, srv *server, did, email, handle string) (*type
 
 	ctx := context.WithValue(t.Context(), hostContextKey{}, srv.hosts[testPDSHost])
 
-	pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	pwHash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
 	require.NoError(t, err)
 
 	// generate a proper K256 signing key for MST operations
