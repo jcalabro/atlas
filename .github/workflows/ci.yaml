@@ -28,9 +28,9 @@ jobs:
         run: |
           just up
 
-      - name: Run Tests (race detector enabled)
+      - name: Run Tests
         run: |
-          just test
+          just test-race
 
       - name: Tear Down Dependencies
         run: just down
