@@ -30,7 +30,7 @@ jobs:
 
       - name: Run Tests
         run: |
-          just test-race
+          go test -race -count=1 -v ./...
 
       - name: Tear Down Dependencies
         run: just down
