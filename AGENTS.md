@@ -7,18 +7,18 @@
 ```bash
 $ just --list
 Available recipes:
-    build-protos       # Generates protobuf sources
-    cover              # run `just test` first, then run this to view test coverage
-    default            # Lints and runs all tests (race detector disabled)
-    down               # Tears down the local development dependencies
-    fdbcli             # Connects to the local foundationdb developement server
-    install-tools      # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
-    lint *ARGS="./..." # Lints the code
-    r *ARGS            # Builds and runs the Go executable
-    run *ARGS          # Builds and runs the Go executable with the race detector enabled
-    t *ARGS="./..."    # Runs the tests
-    test *ARGS="./..." # Runs the tests with the race detector enabled
-    up                 # Stands up local development dependencies in docker
+    build-protos             # Generates protobuf sources
+    cover                    # run `just test` first, then run this to view test coverage
+    default                  # Lints and runs all tests (race detector disabled)
+    up                       # Stands up local development dependencies in docker
+    down                     # Tears down the local development dependencies
+    fdbcli                   # Connects to the local foundationdb developement server
+    install-tools            # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
+    lint *ARGS="./..."       # Lints the code
+    run *ARGS                # Builds and runs the Go executable
+    run-race *ARGS           # Builds and runs the Go executable with the race detector enabled
+    test *ARGS="./..."       # Runs the tests
+    test-race *ARGS="./..."  # Runs the tests with the race detector enabled
 ```
 
 Typically, to test, you should simply run `just`. This will run the linter and all tests with the race detector enabled.

@@ -7,7 +7,7 @@ default: lint test
 # Ensures that all tools required for local development are installed. Before running, ensure you have go installed as well as protoc
 install-tools:
     go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7.2
-
+    go install gotest.tools/gotestsum@v1.13.0
     go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
     go install github.com/bufbuild/buf/cmd/buf@v1.54.0
     go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.18.1
@@ -75,20 +75,20 @@ lint *ARGS="./...":
     golangci-lint run --timeout 1m {{ARGS}}
 
 # Builds and runs the Go executable
-r *ARGS:
+run *ARGS:
     go run ./cmd/atlas {{ARGS}}
 
 # Builds and runs the Go executable with the race detector enabled
-run *ARGS:
-    go run -race ./cmd/atlas {{ARGS}}
+run-race *ARGS:
+    just run -race {{ARGS}}
 
 # Runs the tests
-t *ARGS="./...":
-    go test -count=1 -covermode=atomic -coverprofile=test-coverage.out {{ARGS}}
+test *ARGS="./...":
+    gotestsum --format-hide-empty-pkg --format-icons hivis -- -count=1 {{ARGS}}
 
 # Runs the tests with the race detector enabled
-test *ARGS="./...":
-    just t -race {{ARGS}}
+test-race *ARGS="./...":
+    just test -race {{ARGS}}
 
 # run `just test` first, then run this to view test coverage
 cover:
